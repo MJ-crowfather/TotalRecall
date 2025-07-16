@@ -21,7 +21,7 @@ type DraggableData = {
 
 const CARDS_PER_SET = 3;
 
-const RANK_ORDER: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const RANK_ORDER: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'Joker'];
 
 export function GameBoard({ initialGameState }: { initialGameState: GameState }) {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
@@ -93,7 +93,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
       let cardFoundAndRemoved = false;
       
-      // Handle card removal from source
       if (source.startsWith('play-')) {
         const [_, rowStr, colStr] = source.split('-');
         const row = parseInt(rowStr);
@@ -121,14 +120,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
             newState.narrativeDeck[index].cards = newCard ? [newCard] : [];
             cardFoundAndRemoved = true;
           } else {
-            // This prevents dragging cards that are part of a sequence
             toast({ title: "Invalid Move", description: "Cannot move cards that are part of a sequence.", variant: "destructive" });
             return prevState;
           }
       } 
       
       if (!cardFoundAndRemoved) {
-        console.warn("Card not found at source, aborting drop.", {card, source});
         return prevState; 
       }
       
@@ -204,11 +201,8 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       } else if (target === 'forgotten') {
         newState.forgottenPile.push(card);
       } else {
-        // This case handles drops on invalid targets, like the play area itself
-        // Since the card was already removed from its source, we need to log it as an invalid move
-        // and discard the card to prevent it from disappearing.
         toast({ title: "Invalid Move", description: "This is not a valid placement for the card.", variant: "destructive" });
-        newState.forgottenPile.push(card); // Effectively discards the card
+        newState.forgottenPile.push(card); 
       }
       
       const topRowEmpty = newState.playDeck[0].every(c => c === null);
@@ -240,17 +234,11 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         const newState = JSON.parse(JSON.stringify(prevState));
         let kingFound = false;
 
-        // Find and remove the king from the play deck
+        // Find and remove the king from the play deck, leaving the spot empty
         for (let i = 0; i < newState.playDeck.length; i++) {
             for (let j = 0; j < newState.playDeck[i].length; j++) {
                 if (newState.playDeck[i][j]?.id === card.id) {
-                    if (i === 0) {
-                        const cardBelow = newState.playDeck[1][j];
-                        newState.playDeck[0][j] = cardBelow;
-                        newState.playDeck[1][j] = newState.mainDeck.pop() ?? null;
-                    } else {
-                        newState.playDeck[i][j] = null;
-                    }
+                    newState.playDeck[i][j] = null;
                     kingFound = true;
                     break;
                 }
@@ -295,9 +283,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
             if (sequenceToDiscard && sequenceToDiscard.cards.length > 0) {
                 newState.forgottenPile.push(...sequenceToDiscard.cards);
-                
-                const newCard = newState.mainDeck.pop();
-                newState.narrativeDeck[confirmDiscard].cards = newCard ? [newCard] : [];
+                newState.narrativeDeck[confirmDiscard].cards = []; // Leave the slot empty
                 toast({ title: "Card Discarded", description: `The pile was moved to the forgotten pile.`});
             }
             
@@ -352,7 +338,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
           {/* Center Column */}
           <div className="lg:col-span-2 flex flex-col gap-6">
-              <div className="bg-primary/10 p-4 rounded-lg space-y-8">
+              <div className="bg-primary/10 p-4 rounded-lg space-y-8 flex-grow flex flex-col">
                 <div>
                   <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Memory Sequences</h2>
                   <div className="flex justify-around flex-wrap gap-2">
@@ -364,27 +350,29 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                         className={`relative ${isDiscardMode ? 'border-destructive' : ''}`}
                         suit={sequence.cards.length > 0 ? sequence.cards[0].suit : undefined}
                       >
-                        {sequence.cards.map((c, i) => (
-                          <div 
-                            key={c.id} 
-                            className="absolute" 
-                            style={{ top: `${i * 25}px`, zIndex: i }}
-                            onClick={isDiscardMode ? () => handleNarrativeCardClick(index) : undefined}
-                          >
-                            <GameCard 
-                              card={c} 
-                              source={`narrative-card-${index}`} 
-                              isDraggable={false}
-                              className={isDiscardMode ? 'cursor-pointer hover:border-destructive hover:shadow-lg' : ''}
-                            />
-                          </div>
-                        ))}
+                        {sequence.cards.length > 0 ? (
+                           sequence.cards.map((c, i) => (
+                              <div 
+                                key={c.id} 
+                                className="absolute" 
+                                style={{ top: `${i * 25}px`, zIndex: i }}
+                                onClick={isDiscardMode ? () => handleNarrativeCardClick(index) : undefined}
+                              >
+                                <GameCard 
+                                  card={c} 
+                                  source={`narrative-${index}-card-${i}`} 
+                                  isDraggable={false}
+                                  className={isDiscardMode ? 'cursor-pointer hover:border-destructive hover:shadow-lg' : ''}
+                                />
+                              </div>
+                            ))
+                        ) : null}
                       </CardSlot>
                     ))}
                   </div>
                 </div>
 
-                <div>
+                <div className="mt-8">
                   <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Play Area</h2>
                   <div className="space-y-4">
                       <div className="flex justify-around flex-wrap gap-2">
