@@ -10,6 +10,8 @@ const suitIcons: Record<Suit, React.ElementType> = {
   diamonds: DiamondIcon,
 };
 
+const CARDS_PER_SET = 3;
+
 interface GoalDisplayProps {
   goals: Goal[];
   memoryPiles: Record<Suit, Card[]>;
@@ -24,19 +26,20 @@ export function GoalDisplay({ goals, memoryPiles }: GoalDisplayProps) {
       <CardContent className="space-y-4">
         {goals.map(goal => {
           const SuitIcon = suitIcons[goal.suit];
-          const currentCount = memoryPiles[goal.suit].length;
-          const progress = goal.count > 0 ? (currentCount / goal.count) * 100 : (currentCount > 0 ? 100 : 0);
-          const isComplete = goal.count > 0 && currentCount >= goal.count;
+          const currentSets = Math.floor(memoryPiles[goal.suit].length / CARDS_PER_SET);
+          const totalSetsRequired = goal.count;
+          const progress = totalSetsRequired > 0 ? (currentSets / totalSetsRequired) * 100 : (currentSets > 0 ? 100 : 0);
+          const isComplete = totalSetsRequired > 0 && currentSets >= totalSetsRequired;
 
           return (
             <div key={goal.id}>
               <div className="flex justify-between items-center mb-1 text-sm font-medium">
                 <div className="flex items-center gap-2">
                   <SuitIcon className="w-5 h-5 text-primary" />
-                  <span className="font-body">{goal.count === 0 ? "Any number" : `Collect ${goal.count}`}</span>
+                  <span className="font-body">{`Collect ${totalSetsRequired} set(s)`}</span>
                 </div>
                 <span className={isComplete ? 'font-bold text-primary' : ''}>
-                    {currentCount} / {goal.count > 0 ? goal.count : '∞'}
+                    {`${currentSets} / ${totalSetsRequired}`}
                 </span>
               </div>
               <Progress value={progress} className={isComplete ? '[&>*]:bg-green-500' : ''}/>

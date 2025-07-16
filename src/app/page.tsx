@@ -18,14 +18,19 @@ export default function Home() {
           </CardHeader>
           <CardContent className="space-y-4 text-left font-body">
             <p>
-              Your goal is to complete four 'Memory Sets' by collecting cards of a specific suit. The number of cards required for each set is determined at the start of the game.
+              Your goal is to complete a specific number of 'Memory Sets' for each suit. A set consists of three cards of the same suit. The number of sets required for each suit is determined at the start of the game.
             </p>
             <p>
               Use the cards in your 'Play Deck' to build these sets. You can also draw from the 'Narrative Deck' for help, but be wary—unused narrative cards are lost to the 'Forgotten Pile'.
             </p>
-            <p>
-              Wield powerful royal cards—King, Queen, and Jack—to manipulate the game and overcome challenges.
+            <p className="font-bold">
+              Wield powerful royal cards to manipulate the game:
             </p>
+            <ul className="list-disc pl-5 space-y-1 text-sm">
+                <li><span className="font-bold">King:</span> Discard a card from your narrative deck.</li>
+                <li><span className="font-bold">Queen:</span> Acts as a wild card to complete any set.</li>
+                <li><span className="font-bold">Jack:</span> Remove a card from a sequence or draw from the forgotten pile.</li>
+            </ul>
             <p>
               The clock is ticking. Complete your memories and win the game. Good luck.
             </p>
