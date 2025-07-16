@@ -59,7 +59,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
         pile.cards.push(...sortedCards);
         
-        // Refill narrative deck
         const newCard = newState.mainDeck.pop();
         sequence.cards = newCard ? [newCard] : [];
         
@@ -96,7 +95,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
       let cardFoundAndRemoved = false;
       
-      // Remove card from source
       if (source.startsWith('play-')) {
         const [_, rowStr, colStr] = source.split('-');
         const row = parseInt(rowStr);
@@ -143,7 +141,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         return prevState; 
       }
       
-      // Add card to target
       if (target.startsWith('narrative-')) {
         const seqIndex = parseInt(target.split('-')[1]);
         const sequence = newState.narrativeDeck[seqIndex];
@@ -197,17 +194,17 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
             const isBetween = cardRankValue > minRank && cardRankValue < maxRank;
             const isAdjacent = cardRankValue === minRank - 1 || cardRankValue === maxRank + 1;
             
-            if (maxRank - minRank === 1) { // e.g. 5, 6
+            if (maxRank - minRank === 1) { 
                 if(!isAdjacent) {
                     toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
                     return prevState;
                 }
-            } else if (maxRank - minRank === 2) { // e.g. 5, 7
+            } else if (maxRank - minRank === 2) { 
                  if(!isBetween) {
                     toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
                     return prevState;
                  }
-            } else { // bigger gap, should not happen with current logic
+            } else { 
                 toast({ title: "Invalid Move", description: "This card does not fit the sequence.", variant: "destructive" });
                 return prevState;
             }
@@ -242,12 +239,10 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
       setGameState(prevState => {
         const newState = JSON.parse(JSON.stringify(prevState));
-        // Find and remove the king from its original position
         let kingFound = false;
         for (let i = 0; i < newState.playDeck.length; i++) {
             for (let j = 0; j < newState.playDeck[i].length; j++) {
                 if (newState.playDeck[i][j]?.id === card.id) {
-                    // Logic for replacing the card in the play deck
                     if (i === 0) {
                         const cardBelow = newState.playDeck[1][j];
                         newState.playDeck[0][j] = cardBelow;
@@ -292,10 +287,8 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
             const sequenceToDiscard = newState.narrativeDeck[confirmDiscard];
 
             if (sequenceToDiscard && sequenceToDiscard.cards.length > 0) {
-                // Discard the entire pile (could be more than 1 card)
                 newState.forgottenPile.push(...sequenceToDiscard.cards);
                 
-                // Refill with a new card
                 const newCard = newState.mainDeck.pop();
                 newState.narrativeDeck[confirmDiscard].cards = newCard ? [newCard] : [];
                 toast({ title: "Card Discarded", description: `The pile was moved to the forgotten pile.`});
@@ -319,15 +312,15 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   const isPlayable = (rowIndex: number, colIndex: number): boolean => {
     if (gameState.gameStatus !== 'playing') return false;
     const card = gameState.playDeck[rowIndex][colIndex];
-    if (card === null) return false;
-    
+    if (!card) return false;
+
     // Kings are handled by click, not drag
     if (card.rank === 'K') return false; 
 
-    // Top row is playable.
+    // Top row is always playable.
     if (rowIndex === 0) return true;
 
-    // Bottom row card is playable if the card above it is gone.
+    // A card in the bottom row is playable only if the card above it is gone.
     const cardAbove = gameState.playDeck[0][colIndex];
     return cardAbove === null;
   };
@@ -384,7 +377,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                 <div className="space-y-4">
                     <div className="flex justify-around flex-wrap gap-2">
                       {gameState.playDeck[0].map((card, index) => (
-                        <CardSlot key={`play-slot-0-${index}`} id={`play-0-${index}`} onDrop={() => {}}>
+                        <CardSlot key={`play-slot-0-${index}`} id={`forgotten-0-${index}`} onDrop={handleDrop}>
                           {card && (
                               <GameCard 
                                 card={card} 
@@ -484,3 +477,5 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     </>
   );
 }
+
+    
