@@ -26,7 +26,7 @@ const generateGoals = (): Goal[] => {
     const shuffledSuits = shuffleDeck(SUITS);
     return shuffledSuits.map(suit => ({
         suit,
-        count: Math.floor(Math.random() * 5), // 0-4 as requested
+        count: Math.floor(Math.random() * 3) + 1, // 1-3 sets
         id: suit,
     }));
 };
@@ -68,7 +68,6 @@ export const setupGame = (): GameState => {
         goals,
         playDeck,
         narrativeDeck,
-        discardPile: [],
         forgottenPile: [],
         memoryPiles: { 
             spades: { cards: [], completedWithQueens: 0 }, 
@@ -76,6 +75,7 @@ export const setupGame = (): GameState => {
             clubs: { cards: [], completedWithQueens: 0 }, 
             diamonds: { cards: [], completedWithQueens: 0 } 
         },
+        memorySequences: Array(4).fill(null).map(() => ({ cards: [], suit: null })),
         mainDeck: deck,
         gameStatus: 'playing',
         startTime: Date.now(),

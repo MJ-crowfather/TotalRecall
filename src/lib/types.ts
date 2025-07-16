@@ -18,13 +18,18 @@ export type MemoryPile = {
   completedWithQueens: number;
 };
 
+export type MemorySequence = {
+    cards: Card[];
+    suit: Suit | null;
+}
+
 export interface GameState {
   goals: Goal[];
   playDeck: (Card | null)[][];
   narrativeDeck: Card[];
-  discardPile: Card[];
   forgottenPile: Card[];
   memoryPiles: Record<Suit, MemoryPile>;
+  memorySequences: MemorySequence[];
   mainDeck: Card[];
   gameStatus: 'playing' | 'won' | 'lost';
   startTime: number;

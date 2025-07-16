@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
-import { GameState, Card, Suit, Goal, MemoryPile } from '@/lib/types';
+import { GameState, Card, Suit, Goal, MemoryPile, MemorySequence } from '@/lib/types';
 import { GameCard } from '@/components/game-card';
 import { GoalDisplay } from '@/components/goal-display';
 import { CardSlot } from '@/components/card-slot';
@@ -24,16 +24,53 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   const { toast } = useToast();
   const [gameOutcome, setGameOutcome] = useState<'won' | 'lost' | null>(null);
 
-  const getCompletedSets = (pile: MemoryPile) => {
+  const getCompletedSets = useCallback((pile: MemoryPile) => {
     return Math.floor(pile.cards.length / CARDS_PER_SET) + pile.completedWithQueens;
-  };
+  }, []);
 
-  const checkWinCondition = (goals: Goal[], memoryPiles: Record<Suit, MemoryPile>) => {
+  const checkWinCondition = useCallback((goals: Goal[], memoryPiles: Record<Suit, MemoryPile>) => {
     return goals.every(goal => {
       const completedSets = getCompletedSets(memoryPiles[goal.suit]);
       return completedSets === goal.count;
     });
-  };
+  }, [getCompletedSets]);
+
+  const checkForLoss = useCallback((goals: Goal[], memoryPiles: Record<Suit, MemoryPile>) => {
+    return goals.some(goal => {
+      const completedSets = getCompletedSets(memoryPiles[goal.suit]);
+      return completedSets > goal.count;
+    });
+  }, [getCompletedSets]);
+
+  const processSequences = useCallback((newState: GameState) => {
+    let lossOccurred = false;
+    newState.memorySequences.forEach((sequence, seqIndex) => {
+        if (sequence.cards.length === CARDS_PER_SET) {
+            const suit = sequence.suit!;
+            const pile = newState.memoryPiles[suit];
+            
+            pile.cards.push(...sequence.cards);
+            sequence.cards = [];
+            sequence.suit = null;
+            
+            const goal = newState.goals.find(g => g.suit === suit)!;
+            const completedSets = getCompletedSets(pile);
+
+            if (completedSets > goal.count) {
+                 toast({ title: "Game Over", description: `You have created too many sets for ${suit}.`, variant: "destructive" });
+                 newState.gameStatus = 'lost';
+                 lossOccurred = true;
+            }
+        }
+    });
+
+    if (lossOccurred) return;
+
+    if (checkWinCondition(newState.goals, newState.memoryPiles)) {
+        newState.gameStatus = 'won';
+    }
+  }, [getCompletedSets, checkWinCondition, toast]);
+
 
   const handleDrop = useCallback((data: DraggableData, target: string) => {
     if (!data || !data.card) {
@@ -44,84 +81,85 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     setGameState(prevState => {
       if (prevState.gameStatus !== 'playing') return prevState;
 
-      const newState: GameState = JSON.parse(JSON.stringify(prevState)); // Deep copy for mutation
+      const newState: GameState = JSON.parse(JSON.stringify(prevState));
       const { card, source } = data;
 
-      let cardFound = false;
+      let cardFoundAndRemoved = false;
       if (source.startsWith('play-')) {
         const [_, row, col] = source.split('-').map(Number);
-        if (newState.playDeck[row][col]?.id === card.id) {
+        if (newState.playDeck[row]?.[col]?.id === card.id) {
           newState.playDeck[row][col] = null;
-          cardFound = true;
+          cardFoundAndRemoved = true;
+          // Cascade logic
+          if (row === 0) {
+              const cardBelow = newState.playDeck[1][col];
+              newState.playDeck[0][col] = cardBelow;
+              const newCard = newState.mainDeck.pop() ?? null;
+              newState.playDeck[1][col] = newCard;
+          }
         }
       } else if (source.startsWith('narrative-')) {
         if(newState.narrativeDeck[0]?.id === card.id) {
           newState.narrativeDeck.shift();
-          cardFound = true;
+          cardFoundAndRemoved = true;
         }
       }
       
-      if (!cardFound) return prevState;
+      if (!cardFoundAndRemoved) return prevState;
 
-      if (target.startsWith('memory-')) {
-        const suit = target.split('-')[1] as Suit;
-        if (card.suit !== suit && card.rank !== 'Q') {
-           toast({ title: "Invalid Move", description: `This card must be a ${suit}.`, variant: "destructive" });
-           return prevState;
-        }
+      if (target.startsWith('sequence-')) {
+          const seqIndex = parseInt(target.split('-')[1]);
+          const sequence = newState.memorySequences[seqIndex];
 
-        const goal = newState.goals.find(g => g.suit === suit)!;
-        const pile = newState.memoryPiles[suit];
-        
-        if(card.rank === 'Q') {
-            pile.completedWithQueens++;
-        } else {
-            pile.cards.push(card);
-        }
-        
-        const completedSets = getCompletedSets(pile);
+          // Handle Queens
+          if (card.rank === 'Q') {
+              const goal = newState.goals.find(g => g.suit === card.suit)!;
+              const pile = newState.memoryPiles[card.suit];
+              pile.completedWithQueens++;
 
-        if (completedSets > goal.count) {
-             toast({ title: "Game Over", description: `You have created too many sets for ${suit}.`, variant: "destructive" });
-             newState.gameStatus = 'lost';
-             return newState;
-        }
+              if (getCompletedSets(pile) > goal.count) {
+                  toast({ title: "Game Over", description: `You have created too many sets for ${card.suit}.`, variant: "destructive" });
+                  newState.gameStatus = 'lost';
+                  return newState;
+              }
+              processSequences(newState); // to check for win
+              return newState;
+          }
+          
+          // Handle regular cards
+          if (sequence.suit === null) {
+              sequence.suit = card.suit;
+          }
 
-        if (checkWinCondition(newState.goals, newState.memoryPiles)) {
-          newState.gameStatus = 'won';
-        }
+          if (card.suit !== sequence.suit) {
+              toast({ title: "Invalid Move", description: `This sequence is for ${sequence.suit}.`, variant: "destructive" });
+              return prevState;
+          }
 
-      } else if (target === 'discard') {
-        newState.discardPile.push(card);
+          sequence.cards.push(card);
+          processSequences(newState);
+      } else if (target === 'forgotten') {
+        newState.forgottenPile.push(card);
       } else {
         return prevState;
       }
       
       return newState;
     });
-  }, [toast]);
+  }, [toast, processSequences, getCompletedSets]);
 
   useEffect(() => {
-    if (gameState.gameStatus === 'won') {
-      setGameOutcome('won');
-    } else if (gameState.gameStatus === 'lost') {
-      setGameOutcome('lost');
+    const newOutcome = gameState.gameStatus === 'playing' ? null : gameState.gameStatus;
+    if (newOutcome !== gameOutcome) {
+      setGameOutcome(newOutcome);
     }
-  }, [gameState.gameStatus]);
+  }, [gameState.gameStatus, gameOutcome]);
   
-  const isPlayable = (rowIndex: number, cardIndex: number): boolean => {
+  const isPlayable = (rowIndex: number, colIndex: number): boolean => {
     if (gameState.gameStatus !== 'playing') return false;
-    if (rowIndex === 0) {
-        for (let i = 0; i < cardIndex; i++) {
-            if (gameState.playDeck[0][i] !== null) {
-                return false;
-            }
-        }
-        return gameState.playDeck[0][cardIndex] !== null;
-    }
-    return false;
+    return rowIndex === 0 && gameState.playDeck[0][colIndex] !== null;
   };
-
+  
   return (
     <>
       <div className="flex flex-col h-full gap-4 max-w-7xl mx-auto">
@@ -152,24 +190,9 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
           <div className="lg:col-span-2 flex flex-col gap-6">
               <div>
-                <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Memory Piles</h2>
-                <div className="flex justify-around bg-primary/10 p-4 rounded-lg flex-wrap gap-2">
-                  {['spades', 'hearts', 'clubs', 'diamonds'].map(suit => (
-                    <CardSlot key={suit} id={`memory-${suit}`} onDrop={handleDrop} suit={suit as Suit}>
-                      {gameState.memoryPiles[suit as Suit].cards.length > 0 &&
-                        <GameCard card={gameState.memoryPiles[suit as Suit].cards.slice(-1)[0]} source={`memory-${suit}`} />
-                      }
-                    </CardSlot>
-                  ))}
-                </div>
-              </div>
-
-              <Separator />
-              
-              <div>
-                  <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Play Area</h2>
-                  <div className="space-y-4">
-                    <div className="flex justify-around flex-wrap gap-2">
+                <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Play Area</h2>
+                <div className="space-y-4">
+                    <div className="flex justify-around flex-wrap gap-2 bg-primary/10 p-4 rounded-lg">
                       {gameState.playDeck[0].map((card, index) => (
                         <CardSlot key={`play-slot-0-${index}`} id={`play-0-${index}`} onDrop={handleDrop}>
                           {card && (
@@ -189,10 +212,25 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                         </CardSlot>
                       ))}
                     </div>
-                  </div>
+                </div>
+              </div>
+
+              <Separator />
+              
+              <div>
+                <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Memory Sequences</h2>
+                <div className="flex justify-around p-4 rounded-lg flex-wrap gap-2">
+                  {gameState.memorySequences.map((sequence, index) => (
+                    <CardSlot key={index} id={`sequence-${index}`} onDrop={handleDrop} suit={sequence.suit ?? undefined}>
+                      {sequence.cards.length > 0 &&
+                        <GameCard card={sequence.cards.slice(-1)[0]} source={`sequence-${index}`} />
+                      }
+                    </CardSlot>
+                  ))}
+                </div>
               </div>
           </div>
-
+          
           <div className="lg:col-span-1 flex flex-col gap-8 items-center lg:items-stretch">
             <div className="flex flex-row lg:flex-col gap-6 justify-around w-full">
                 <div className="space-y-2 text-center">
@@ -200,17 +238,13 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                   <CardBack count={gameState.mainDeck.length} />
                 </div>
                 <div className="space-y-2 text-center">
-                  <h2 className="font-headline text-xl text-primary/80">Discard Pile</h2>
-                    <CardSlot id="discard" onDrop={handleDrop}>
-                      {gameState.discardPile.length > 0 ? 
-                          <GameCard card={gameState.discardPile.slice(-1)[0]} source="discard" /> :
-                          <div className="w-24 h-36 rounded-lg border-2 border-dashed border-muted-foreground/50 flex items-center justify-center text-muted-foreground text-center p-2">Discard Area</div>
-                      }
+                    <h2 className="font-headline text-xl text-primary/80">Forgotten Pile</h2>
+                    <CardSlot id="forgotten" onDrop={handleDrop}>
+                        {gameState.forgottenPile.length > 0 ?
+                            <CardBack pileName="Forgotten" count={gameState.forgottenPile.length} pile={gameState.forgottenPile} />
+                            : <div className="w-24 h-36 rounded-lg border-2 border-dashed border-muted-foreground/50 flex items-center justify-center text-muted-foreground text-center p-2">Discard Area</div>
+                        }
                     </CardSlot>
-                </div>
-                <div className="space-y-2 text-center">
-                  <h2 className="font-headline text-xl text-primary/80">Forgotten Pile</h2>
-                  <CardBack pileName="Forgotten" count={gameState.forgottenPile.length} pile={gameState.forgottenPile} />
                 </div>
             </div>
           </div>
@@ -225,7 +259,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
             <AlertDialogDescription>
               {gameOutcome === 'won' 
                 ? 'You have successfully pieced together all the memories.' 
-                : 'You collected too many cards for a set and the memory became corrupted. A fragile mind is a dangerous thing.'}
+                : 'The memory became corrupted. A fragile mind is a dangerous thing.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
