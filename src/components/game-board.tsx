@@ -36,7 +36,10 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   };
 
   const handleDrop = useCallback((data: DraggableData, target: string) => {
-    if (!data) return; // Fix: Ensure data exists before destructuring
+    if (!data || !data.card) {
+      console.error("Invalid drop data received", data);
+      return;
+    }
 
     setGameState(prevState => {
       if (prevState.gameStatus !== 'playing') return prevState;
