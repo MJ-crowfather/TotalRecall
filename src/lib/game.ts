@@ -2,6 +2,7 @@ import { type Suit, type Rank, type Card, type Goal, type GameState } from './ty
 
 const SUITS: Suit[] = ['spades', 'hearts', 'clubs', 'diamonds'];
 const RANKS: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+const ROYAL_RANKS: Rank[] = ['J', 'Q', 'K'];
 
 export const createDeck = (): Card[] => {
   return SUITS.flatMap(suit =>
@@ -26,7 +27,7 @@ const generateGoals = (): Goal[] => {
     // Each suit gets between 0 and 4 sets to complete.
     return SUITS.map(suit => ({
         suit,
-        count: Math.floor(Math.random() * 5), // 0-4 sets
+        count: Math.floor(Math.random() * 3) + 1, // 1-3 sets
         id: suit,
     }));
 };
@@ -35,34 +36,32 @@ export const setupGame = (): GameState => {
     const goals = generateGoals();
     let deck = shuffleDeck(createDeck());
     
-    // Deal Narrative Deck (4 cards)
+    // Deal Narrative Deck (4 cards), ensuring no royal cards
     const narrativeDeck: (Card | null)[] = [];
-    for (let i = 0; i < 4; i++) {
-        narrativeDeck.push(deck.pop() ?? null);
-    }
+    const tempHeldRoyals: Card[] = [];
 
-    // Deal Play Deck (8 cards in 2 rows)
-    const playDeck: (Card | null)[][] = [[], []];
-    for (let i = 0; i < 8; i++) {
+    while (narrativeDeck.length < 4 && deck.length > 0) {
         const card = deck.pop();
         if (card) {
-            if (i < 4) {
-                // Top row (A-D)
-                playDeck[0].push(card);
+            if (ROYAL_RANKS.includes(card.rank)) {
+                tempHeldRoyals.push(card);
             } else {
-                // Bottom row (E-H)
-                playDeck[1].push(card);
+                narrativeDeck.push(card);
             }
         }
     }
-    // Ensure both rows have 4 cards even if deck runs out
-    while (playDeck[0].length < 4) {
-        playDeck[0].push(null);
-    }
-    while (playDeck[1].length < 4) {
-        playDeck[1].push(null);
-    }
+    
+    // Add held royal cards back to the deck and reshuffle
+    deck.push(...tempHeldRoyals);
+    deck = shuffleDeck(deck);
 
+    // Deal Play Deck (8 cards in 2 rows)
+    const playDeck: (Card | null)[][] = [[], []];
+    for (let i = 0; i < 2; i++) {
+        for (let j = 0; j < 4; j++) {
+            playDeck[i].push(deck.pop() ?? null);
+        }
+    }
 
     return {
         goals,
