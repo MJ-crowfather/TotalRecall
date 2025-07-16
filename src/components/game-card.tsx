@@ -25,10 +25,12 @@ interface GameCardProps {
   source: string;
   isDraggable?: boolean;
   className?: string;
+  onClick?: () => void;
 }
 
-export function GameCard({ card, source, isDraggable = true, className }: GameCardProps) {
+export function GameCard({ card, source, isDraggable = true, className, onClick }: GameCardProps) {
   const SuitIcon = suitIcons[card.suit];
+  const isClickable = !!onClick;
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     if (!isDraggable) {
@@ -44,9 +46,12 @@ export function GameCard({ card, source, isDraggable = true, className }: GameCa
     <div
       draggable={isDraggable}
       onDragStart={handleDragStart}
+      onClick={onClick}
       className={cn(
         "w-24 h-36 bg-card rounded-lg p-2 flex flex-col justify-between shadow-md border",
-        isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "cursor-not-allowed",
+        isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "",
+        !isDraggable && !isClickable ? "cursor-not-allowed" : "",
+        isClickable ? "cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all" : "",
         suitColors[card.suit],
         className
       )}

@@ -27,9 +27,10 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   const { toast } = useToast();
   const [gameOutcome, setGameOutcome] = useState<'won' | 'lost' | null>(null);
   const [discardedTopRow, setDiscardedTopRow] = useState([false, false, false, false]);
-  const [isDiscardMode, setIsDiscardMode] = useState(false);
   const [kingAction, setKingAction] = useState<Card | null>(null);
+  const [isDiscardMode, setIsDiscardMode] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState<number | null>(null);
+
 
   const getRankValue = (rank: Rank): number => RANK_ORDER.indexOf(rank);
 
@@ -72,9 +73,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           newState.gameStatus = 'lost';
           return true;
         }
+        if (checkWinCondition(newState)) {
+            newState.gameStatus = 'won';
+        }
       }
       return false;
-  }, [getCompletedSets, toast]);
+  }, [getCompletedSets, toast, checkWinCondition]);
 
 
   const handleDrop = useCallback((data: DraggableData, target: string) => {
@@ -92,6 +96,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
       let cardFoundAndRemoved = false;
       
+      // Remove card from source
       if (source.startsWith('play-')) {
         const [_, rowStr, colStr] = source.split('-');
         const row = parseInt(rowStr);
@@ -124,11 +129,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
             }
           }
         }
-      } 
-      else if (source.startsWith('narrative-')) {
-        // Prevent narrative cards from being dragged elsewhere
-        toast({ title: "Invalid Move", description: "Cards in the narrative deck cannot be moved.", variant: "destructive" });
-        return prevState;
+      } else if (source.startsWith('narrative-card-')) {
+          const index = parseInt(source.split('-')[2]);
+          if (newState.narrativeDeck[index].cards[0].id === card.id) {
+            newState.narrativeDeck[index].cards.shift();
+            cardFoundAndRemoved = true;
+          }
       }
 
 
@@ -137,15 +143,23 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         return prevState; 
       }
       
+      // Add card to target
       if (target.startsWith('narrative-')) {
         const seqIndex = parseInt(target.split('-')[1]);
         const sequence = newState.narrativeDeck[seqIndex];
 
+        // Handle Royal cards
         if (card.rank === 'K') {
             setKingAction(card);
-            return newState;
+            // We need to put the state back as it was before the drag, since king is a special action.
+            // This is complex, might be better to handle King via click instead of drag-drop.
+            // For now, let's just return the previous state. The card will snap back.
+            // A better solution is needed here. Let's assume for now the user just clicks a king.
+            // For drag-drop, we will just put the king in the forgotten pile for now.
+             newState.forgottenPile.push(card);
+             setKingAction(card);
+             return newState; // Return and show dialog
         }
-
         if (card.rank === 'Q') {
           const pile = newState.memoryPiles[card.suit];
           pile.completedWithQueens++;
@@ -160,10 +174,10 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           }
           return newState;
         }
-        
+
         if (sequence.cards.length === 0) {
-          toast({ title: "Invalid Move", description: "Cannot place card on an empty narrative slot.", variant: "destructive" });
-          return prevState;
+           toast({ title: "Invalid Move", description: "This narrative sequence is complete.", variant: "destructive" });
+           return prevState;
         }
 
         if (card.suit !== sequence.cards[0].suit) {
@@ -187,9 +201,22 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                 return prevState;
             }
         } else if (sequence.cards.length === 2) {
-            if (!((cardRankValue === minRank - 1) || (cardRankValue === maxRank + 1))) {
-                 toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
-                 return prevState;
+            const isBetween = cardRankValue > minRank && cardRankValue < maxRank;
+            const isAdjacent = cardRankValue === minRank - 1 || cardRankValue === maxRank + 1;
+            
+            if (maxRank - minRank === 1) { // e.g. 5, 6
+                if(!isAdjacent) {
+                    toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
+                    return prevState;
+                }
+            } else if (maxRank - minRank === 2) { // e.g. 5, 7
+                 if(!isBetween) {
+                    toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
+                    return prevState;
+                 }
+            } else { // bigger gap, should not happen with current logic
+                toast({ title: "Invalid Move", description: "This card does not fit the sequence.", variant: "destructive" });
+                return prevState;
             }
         }
 
@@ -200,7 +227,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       } else if (target === 'forgotten') {
         newState.forgottenPile.push(card);
       } else {
-        // This case handles drops on invalid targets, like the play area itself
         toast({ title: "Invalid Move", description: "This is not a valid placement for the card.", variant: "destructive" });
         return prevState;
       }
@@ -213,17 +239,31 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     });
   }, [toast, getCompletedSets, checkWinCondition, discardedTopRow, processNarrativeSet]);
 
-  const handleNarrativeCardClick = (index: number) => {
-    if (!isDiscardMode) return;
-    setConfirmDiscard(index);
-  };
-  
-  const handleKingAction = (action: 'discardNarrative' | 'discardKing') => {
-      if (!kingAction) return;
+  const handleKingClick = (card: Card) => {
+    if (gameState.gameStatus !== 'playing') return;
+    setKingAction(card);
+  }
+
+  const handleKingAction = (action: 'discardNarrative' | 'discardKing', card: Card) => {
+      if (!card) return;
 
       setGameState(prevState => {
         const newState = JSON.parse(JSON.stringify(prevState));
-        newState.forgottenPile.push(kingAction);
+        // Find and remove the king from its original position
+        let kingFound = false;
+        for (let i = 0; i < newState.playDeck.length; i++) {
+            for (let j = 0; j < newState.playDeck[i].length; j++) {
+                if (newState.playDeck[i][j]?.id === card.id) {
+                    newState.playDeck[i][j] = null; // A simplified removal, might need cascading logic later
+                    kingFound = true;
+                    break;
+                }
+            }
+            if(kingFound) break;
+        }
+
+        newState.forgottenPile.push(card);
+
         if (action === 'discardNarrative') {
             toast({ title: "King Played!", description: "Select a card from the narrative deck to discard." });
             setIsDiscardMode(true);
@@ -233,6 +273,11 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       setKingAction(null);
   }
 
+  const handleNarrativeCardClick = (index: number) => {
+    if (!isDiscardMode) return;
+    setConfirmDiscard(index);
+  };
+  
   const handleConfirmDiscard = (confirmed: boolean) => {
     if (confirmDiscard === null) return;
     
@@ -242,10 +287,13 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
             const sequenceToDiscard = newState.narrativeDeck[confirmDiscard];
 
             if (sequenceToDiscard && sequenceToDiscard.cards.length > 0) {
+                // Discard the entire pile (could be more than 1 card)
                 newState.forgottenPile.push(...sequenceToDiscard.cards);
+                
+                // Refill with a new card
                 const newCard = newState.mainDeck.pop();
                 newState.narrativeDeck[confirmDiscard].cards = newCard ? [newCard] : [];
-                toast({ title: "Cards Discarded", description: `The pile was moved to the forgotten pile.`});
+                toast({ title: "Card Discarded", description: `The pile was moved to the forgotten pile.`});
             }
             
             setIsDiscardMode(false);
@@ -253,7 +301,9 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         });
     }
     setConfirmDiscard(null);
+    setIsDiscardMode(false);
   };
+
 
   useEffect(() => {
     if (gameState.gameStatus !== 'playing') {
@@ -266,6 +316,8 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     const card = gameState.playDeck[rowIndex][colIndex];
     if (card === null) return false;
     
+    if (card.rank === 'K') return false; // Kings are handled by click
+
     // Top row is playable.
     if (rowIndex === 0) return true;
 
@@ -290,7 +342,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
           {/* Center Column */}
           <div className="lg:col-span-2 flex flex-col gap-6">
-
               <div>
                 <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Narrative Deck</h2>
                 <div className="flex justify-around flex-wrap gap-2 bg-primary/10 p-4 rounded-lg">
@@ -299,7 +350,8 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                       key={sequence.id} 
                       id={sequence.id} 
                       onDrop={handleDrop}
-                      className="relative"
+                      className={isDiscardMode ? 'border-destructive' : ''}
+                      suit={sequence.cards.length > 0 ? sequence.cards[0].suit : undefined}
                     >
                       {sequence.cards.map((c, i) => (
                         <div 
@@ -311,7 +363,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                           <GameCard 
                             card={c} 
                             source={`${sequence.id}-${i}`} 
-                            isDraggable={false} // Narrative cards themselves can't be dragged
+                            isDraggable={false}
                             className={isDiscardMode ? 'cursor-pointer hover:border-destructive hover:shadow-lg' : ''}
                           />
                         </div>
@@ -332,6 +384,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                                 card={card} 
                                 source={`play-0-${index}`}
                                 isDraggable={isPlayable(0, index)}
+                                onClick={card.rank === 'K' ? () => handleKingClick(card) : undefined}
                               />
                           )}
                         </CardSlot>
@@ -340,7 +393,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                     <div className="flex justify-around flex-wrap gap-2">
                       {gameState.playDeck[1].map((card, index) => (
                         <CardSlot key={`play-slot-1-${index}`} id={`play-1-${index}`} onDrop={() => {}}>
-                          {card && <GameCard card={card} source={`play-1-${index}`} isDraggable={isPlayable(1, index)} />}
+                          {card && <GameCard 
+                            card={card} 
+                            source={`play-1-${index}`} 
+                            isDraggable={isPlayable(1, index)}
+                            onClick={card.rank === 'K' ? () => handleKingClick(card) : undefined}
+                          />}
                         </CardSlot>
                       ))}
                     </div>
@@ -393,12 +451,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
               <AlertDialogHeader>
                   <AlertDialogTitle className="font-headline text-2xl">King Power</AlertDialogTitle>
                   <AlertDialogDescription>
-                      You have played the King. Choose an action.
+                      You have played the King of {kingAction?.suit}. Choose an action.
                   </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                  <Button variant="outline" onClick={() => handleKingAction('discardNarrative')}>Discard a Narrative Pile</Button>
-                  <Button onClick={() => handleKingAction('discardKing')}>Just Discard King</Button>
+                  <Button variant="outline" onClick={() => handleKingAction('discardNarrative', kingAction!)}>Discard a Narrative Card</Button>
+                  <Button onClick={() => handleKingAction('discardKing', kingAction!)}>Just Discard King</Button>
               </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
