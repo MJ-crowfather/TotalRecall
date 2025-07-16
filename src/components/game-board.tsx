@@ -36,6 +36,8 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   };
 
   const handleDrop = useCallback((data: DraggableData, target: string) => {
+    if (!data) return; // Fix: Ensure data exists before destructuring
+
     setGameState(prevState => {
       if (prevState.gameStatus !== 'playing') return prevState;
 
