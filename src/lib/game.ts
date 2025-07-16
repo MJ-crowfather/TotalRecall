@@ -23,10 +23,10 @@ export const shuffleDeck = <T,>(deck: T[]): T[] => {
 };
 
 const generateGoals = (): Goal[] => {
-    const shuffledSuits = shuffleDeck(SUITS);
-    return shuffledSuits.map(suit => ({
+    // Each suit gets between 0 and 4 sets to complete.
+    return SUITS.map(suit => ({
         suit,
-        count: Math.floor(Math.random() * 3) + 1, // 1-3 sets
+        count: Math.floor(Math.random() * 5), // 0-4 sets
         id: suit,
     }));
 };
@@ -35,34 +35,45 @@ const isFaceCard = (card: Card): boolean => {
     return ['J', 'Q', 'K'].includes(card.rank);
 };
 
+
 export const setupGame = (): GameState => {
     const goals = generateGoals();
     let deck = shuffleDeck(createDeck());
     
-    // Deal Narrative Deck (4 non-face cards, except Aces)
+    // Deal Narrative Deck (4 non-face cards, except Aces are allowed)
     const narrativeDeck: Card[] = [];
-    
-    let tempMainDeck = [...deck];
-    let narrativeCandidates = tempMainDeck.filter(c => !isFaceCard(c));
-    let otherCards = tempMainDeck.filter(c => isFaceCard(c));
-    
-    narrativeDeck.push(...narrativeCandidates.slice(0, 4));
-    
-    const remainingCandidates = narrativeCandidates.slice(4);
-    deck = shuffleDeck([...remainingCandidates, ...otherCards]);
+    const tempMainDeck: Card[] = [];
+    let dealtCount = 0;
 
-    // Deal Play Deck
+    // We need to find 4 cards for the narrative deck
+    const narrativeCandidates = deck.filter(c => !isFaceCard(c) || c.rank === 'A');
+    const remainingDeck = deck.filter(c => isFaceCard(c) && c.rank !== 'A');
+    
+    narrativeDeck.push(...narrativeCandidates.splice(0, 4));
+    
+    // Reassemble the deck without the narrative cards and shuffle again
+    deck = shuffleDeck([...narrativeCandidates, ...remainingDeck]);
+
+
+    // Deal Play Deck (8 cards in 2 rows)
     const playDeck: (Card | null)[][] = [[], []];
     for (let i = 0; i < 8; i++) {
         const card = deck.pop();
         if (card) {
             if (i < 4) {
+                // Top row (A-D)
                 playDeck[0].push(card);
             } else {
+                // Bottom row (E-H)
                 playDeck[1].push(card);
             }
         }
     }
+    // ensure the second row has 4 cards even if deck runs out
+    while (playDeck[1].length < 4) {
+        playDeck[1].push(null);
+    }
+
 
     return {
         goals,
@@ -82,3 +93,5 @@ export const setupGame = (): GameState => {
         history: [],
     };
 };
+
+    
