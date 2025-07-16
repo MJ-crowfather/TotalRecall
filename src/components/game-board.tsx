@@ -26,6 +26,9 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   const { toast } = useToast();
   const [gameOutcome, setGameOutcome] = useState<'won' | 'lost' | null>(null);
   const [discardedTopRow, setDiscardedTopRow] = useState([false, false, false, false]);
+  const [isDiscardMode, setIsDiscardMode] = useState(false);
+
+  const getRankValue = (rank: Rank): number => RANK_ORDER.indexOf(rank);
 
   const getCompletedSets = useCallback((pile: MemoryPile) => {
     return Math.floor(pile.cards.length / CARDS_PER_SET) + pile.completedWithQueens;
@@ -38,24 +41,26 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     });
   }, [getCompletedSets]);
 
-  const getRankValue = (rank: Rank): number => RANK_ORDER.indexOf(rank);
 
   const processSequences = useCallback((newState: GameState) => {
     let lossOccurred = false;
     newState.memorySequences.forEach((sequence) => {
       if (sequence.cards.length < CARDS_PER_SET) return;
 
-      const sortedRanks = sequence.cards
-        .map(c => getRankValue(c.rank))
-        .sort((a, b) => a - b);
+      const sortedCards = [...sequence.cards].sort((a, b) => getRankValue(a.rank) - getRankValue(b.rank));
       
-      const isSequential = sortedRanks[0] + 1 === sortedRanks[1] && sortedRanks[1] + 1 === sortedRanks[2];
+      const isSequential = getRankValue(sortedCards[0].rank) + 1 === getRankValue(sortedCards[1].rank) && getRankValue(sortedCards[1].rank) + 1 === getRankValue(sortedCards[2].rank);
 
       if (isSequential) {
         const suit = sequence.suit!;
         const pile = newState.memoryPiles[suit];
 
         pile.cards.push(...sequence.cards);
+        
+        // Find which narrative cards were part of the set and remove them
+        const sequenceCardIds = new Set(sequence.cards.map(c => c.id));
+        newState.narrativeDeck = newState.narrativeDeck.map(c => c && sequenceCardIds.has(c.id) ? null : c);
+
         sequence.cards = [];
         sequence.suit = null;
 
@@ -99,7 +104,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         const col = parseInt(colStr);
 
         if (newState.playDeck[row]?.[col]?.id === card.id) {
-          // If card was played from top row, replace it
           if (row === 0 && !target.startsWith('forgotten')) {
             const cardBelow = newState.playDeck[1][col];
             newState.playDeck[0][col] = cardBelow;
@@ -107,13 +111,10 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           } else {
              newState.playDeck[row][col] = null;
           }
-          
           cardFoundAndRemoved = true;
 
-          // If card was discarded from top row
           if (row === 0 && target.startsWith('forgotten')) {
             newDiscardedTopRow[col] = true;
-            setDiscardedTopRow(newDiscardedTopRow);
             
             if (newDiscardedTopRow.every(d => d)) {
                 newState.playDeck[0] = newState.playDeck[1];
@@ -124,26 +125,39 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                     newState.mainDeck.pop() ?? null,
                 ];
                 setDiscardedTopRow([false, false, false, false]);
+            } else {
+                setDiscardedTopRow(newDiscardedTopRow);
             }
           }
         }
       } 
       else if (source.startsWith('narrative-')) {
-        const index = parseInt(source.split('-')[1]);
-        if (newState.narrativeDeck[index]?.id === card.id) {
-          newState.narrativeDeck[index] = null;
-          cardFoundAndRemoved = true;
-        }
+         const index = parseInt(source.split('-')[1]);
+         if (newState.narrativeDeck[index]?.id === card.id) {
+            newState.narrativeDeck[index] = null;
+            cardFoundAndRemoved = true;
+         }
+      } else if (source.startsWith('sequence-')) {
+        // This case is for moving cards *from* a sequence, which shouldn't happen, but we handle it to prevent bugs.
+        return prevState;
       }
+
 
       if (!cardFoundAndRemoved) {
         console.warn("Card not found at source, aborting drop.", {card, source});
         return prevState; 
       }
-
+      
       if (target.startsWith('sequence-')) {
         const seqIndex = parseInt(target.split('-')[1]);
         const sequence = newState.memorySequences[seqIndex];
+
+        if (card.rank === 'K') {
+            newState.forgottenPile.push(card);
+            toast({ title: "King Played!", description: "Select a card from the narrative deck to discard." });
+            setIsDiscardMode(true);
+            return newState;
+        }
 
         if (card.rank === 'Q') {
           const pile = newState.memoryPiles[card.suit];
@@ -153,20 +167,20 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
             toast({ title: "Game Over", description: `You used a Queen to create too many sets for ${card.suit}.`, variant: "destructive" });
             newState.gameStatus = 'lost';
           }
+           newState.forgottenPile.push(card);
           if (checkWinCondition(newState)) {
              newState.gameStatus = 'won';
           }
-          processSequences(newState);
           return newState;
         }
 
-        if (sequence.suit === null) {
-          sequence.suit = card.suit;
-        }
-
-        if (card.suit !== sequence.suit) {
+        if (sequence.cards.length > 0 && card.suit !== sequence.suit) {
           toast({ title: "Invalid Move", description: `This sequence is for ${sequence.suit}.`, variant: "destructive" });
           return prevState;
+        }
+        
+        if (sequence.cards.length === 0) {
+            sequence.suit = card.suit;
         }
 
         if(sequence.cards.length > 0) {
@@ -181,33 +195,13 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
               return prevState;
           }
         }
-
+        
         sequence.cards.push(card);
         processSequences(newState);
 
       } else if (target === 'forgotten') {
         newState.forgottenPile.push(card);
       } else {
-        // Card was dropped somewhere invalid, return it to its source
-        if (source.startsWith('play-')) {
-            const [_, rowStr, colStr] = source.split('-');
-            const row = parseInt(rowStr);
-            const col = parseInt(colStr);
-            newState.playDeck[row][col] = card; // Put it back
-            // Revert play logic
-            if(row === 0 && !target.startsWith('forgotten')) {
-                newState.playDeck[1][col] = newState.playDeck[0][col];
-                newState.playDeck[0][col] = card;
-                const drawnCard = newState.mainDeck.pop();
-                if(drawnCard) {
-                    newState.playDeck[1][col] = drawnCard;
-                }
-            }
-
-        } else if (source.startsWith('narrative-')) {
-            const index = parseInt(source.split('-')[1]);
-            newState.narrativeDeck[index] = card; // Put it back
-        }
         toast({ title: "Invalid Move", description: "This is not a valid placement for the card.", variant: "destructive" });
         return prevState;
       }
@@ -215,6 +209,24 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       return newState;
     });
   }, [toast, processSequences, getCompletedSets, checkWinCondition]);
+
+  const handleNarrativeCardClick = (index: number) => {
+    if (!isDiscardMode) return;
+    
+    setGameState(prevState => {
+        const newState = JSON.parse(JSON.stringify(prevState));
+        const cardToDiscard = newState.narrativeDeck[index];
+
+        if (cardToDiscard) {
+            newState.forgottenPile.push(cardToDiscard);
+            newState.narrativeDeck[index] = null;
+            toast({ title: "Card Discarded", description: `The ${cardToDiscard.rank} of ${cardToDiscard.suit} was moved to the forgotten pile.`});
+        }
+        
+        setIsDiscardMode(false);
+        return newState;
+    });
+  };
 
   useEffect(() => {
     if (gameState.gameStatus !== 'playing') {
@@ -225,11 +237,9 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   const isPlayable = (rowIndex: number, colIndex: number): boolean => {
     if (gameState.gameStatus !== 'playing') return false;
     if (gameState.playDeck[rowIndex][colIndex] === null) return false;
-    
-    // Bottom row cards are never directly playable
     if (rowIndex === 1) return false;
 
-    // A card is playable if all cards to its left in the top row have been discarded.
+    // A top row card is playable if all cards to its left have been discarded.
     for (let i = 0; i < colIndex; i++) {
         if (!discardedTopRow[i]) return false;
     }
@@ -264,7 +274,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                         className="relative"
                      >
                        {sequence.cards.map((c, i) => (
-                          <div key={c.id} className="absolute" style={{ top: `${i * 15}px`}}>
+                          <div key={c.id} className="absolute" style={{ top: `${i * 20}px`}}>
                             <GameCard card={c} source={`sequence-${index}-${i}`} isDraggable={false}/>
                           </div>
                        ))}
@@ -279,19 +289,22 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                 <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Narrative Deck</h2>
                 <div className="flex justify-around flex-wrap gap-2 bg-primary/10 p-4 rounded-lg">
                   {gameState.narrativeDeck.map((card, index) => (
-                      <CardSlot key={`narrative-slot-${index}`} id={`narrative-drop-${index}`} onDrop={() => {}}>
-                        {card && (
-                            <GameCard 
-                              card={card} 
-                              source={`narrative-${index}`}
-                              isDraggable={gameState.gameStatus === 'playing'}
-                            />
-                        )}
-                      </CardSlot>
+                      <div key={card?.id || `narrative-empty-${index}`} onClick={() => handleNarrativeCardClick(index)}>
+                        <CardSlot id={`narrative-drop-${index}`} onDrop={() => {}}>
+                          {card && (
+                              <GameCard 
+                                card={card} 
+                                source={`narrative-${index}`}
+                                isDraggable={false}
+                                className={isDiscardMode ? 'cursor-pointer hover:border-red-500 hover:shadow-lg' : ''}
+                              />
+                          )}
+                        </CardSlot>
+                      </div>
                   ))}
                 </div>
               </div>
-              
+
               <div>
                 <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Play Area</h2>
                 <div className="space-y-4">
@@ -361,3 +374,5 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     </>
   );
 }
+
+    
