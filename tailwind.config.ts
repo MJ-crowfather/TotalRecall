@@ -10,8 +10,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
+        body: ['"Varela Round"', 'sans-serif'],
+        headline: ['Bangers', 'cursive'],
         code: ['monospace'],
       },
       colors: {
