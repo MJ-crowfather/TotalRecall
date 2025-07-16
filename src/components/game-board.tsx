@@ -23,7 +23,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const { toast } = useToast();
   const [gameOutcome, setGameOutcome] = useState<'won' | 'lost' | null>(null);
-  // Keep track of which top-row cards have been discarded
   const [discardedTopRow, setDiscardedTopRow] = useState([false, false, false, false]);
 
   const getCompletedSets = useCallback((pile: MemoryPile) => {
@@ -82,7 +81,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
       let cardFoundAndRemoved = false;
       
-      // Handle drag from PLAY AREA
       if (source.startsWith('play-')) {
         const [_, rowStr, colStr] = source.split('-');
         const row = parseInt(rowStr);
@@ -92,7 +90,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           newState.playDeck[row][col] = null;
           cardFoundAndRemoved = true;
 
-          // If card was played (not discarded) from top row
+          // If card was played from top row (and not discarded), replace it
           if (row === 0 && !target.startsWith('forgotten')) {
             const cardBelow = newState.playDeck[1][col];
             newState.playDeck[0][col] = cardBelow;
@@ -101,8 +99,9 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           // If card was discarded from top row
           else if (row === 0 && target.startsWith('forgotten')) {
             newDiscardedTopRow[col] = true;
+            setDiscardedTopRow(newDiscardedTopRow);
             
-            // Check if all top row cards are discarded
+            // Check if all top row cards are discarded to cycle rows
             if (newDiscardedTopRow.every(d => d)) {
                 newState.playDeck[0] = newState.playDeck[1];
                 newState.playDeck[1] = [
@@ -112,22 +111,21 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                     newState.mainDeck.pop() ?? null,
                 ];
                 setDiscardedTopRow([false, false, false, false]);
-            } else {
-                setDiscardedTopRow(newDiscardedTopRow);
             }
           }
         }
       } 
-      // Handle drag from NARRATIVE DECK
       else if (source.startsWith('narrative-')) {
-        if (newState.narrativeDeck[0]?.id === card.id) {
-          newState.narrativeDeck.shift();
+        const index = parseInt(source.split('-')[1]);
+        if (newState.narrativeDeck[index]?.id === card.id) {
+          newState.narrativeDeck[index] = null;
           cardFoundAndRemoved = true;
         }
       }
 
       if (!cardFoundAndRemoved) {
-        return prevState; // Card mismatch, abort state update
+        console.warn("Card not found at source, aborting drop.", {card, source});
+        return prevState; 
       }
 
       // Handle drop targets
@@ -135,7 +133,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         const seqIndex = parseInt(target.split('-')[1]);
         const sequence = newState.memorySequences[seqIndex];
 
-        // Handle Queens
         if (card.rank === 'Q') {
           const pile = newState.memoryPiles[card.suit];
           pile.completedWithQueens++;
@@ -143,20 +140,21 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           if (getCompletedSets(pile) > goal.count) {
             toast({ title: "Game Over", description: `You used a Queen to create too many sets for ${card.suit}.`, variant: "destructive" });
             newState.gameStatus = 'lost';
-            return newState;
+          } else {
+             if (checkWinCondition(newState)) {
+                newState.gameStatus = 'won';
+             }
           }
-          processSequences(newState); // to check for win
           return newState;
         }
 
-        // Handle regular cards
         if (sequence.suit === null) {
           sequence.suit = card.suit;
         }
 
         if (card.suit !== sequence.suit) {
           toast({ title: "Invalid Move", description: `This sequence is for ${sequence.suit}.`, variant: "destructive" });
-          return prevState; // Return original state
+          return prevState;
         }
 
         sequence.cards.push(card);
@@ -164,12 +162,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       } else if (target === 'forgotten') {
         newState.forgottenPile.push(card);
       } else {
-        return prevState; // Invalid target
+        return prevState;
       }
       
       return newState;
     });
-  }, [toast, processSequences, getCompletedSets, discardedTopRow]);
+  }, [toast, processSequences, getCompletedSets, checkWinCondition]);
 
   useEffect(() => {
     if (gameState.gameStatus !== 'playing') {
@@ -182,7 +180,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     if (rowIndex !== 0) return false;
     if (gameState.playDeck[0][colIndex] === null) return false;
 
-    // Check if any previous cards in the top row are still on the board
+    // A card is playable if all cards to its left in the top row have been discarded.
     for (let i = 0; i < colIndex; i++) {
         if (!discardedTopRow[i]) return false;
     }
@@ -198,23 +196,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-grow">
+          {/* Left Column */}
           <div className="lg:col-span-1 flex flex-col gap-6">
             <GoalDisplay goals={gameState.goals} memoryPiles={gameState.memoryPiles} />
-            <div className="space-y-2">
-              <h2 className="font-headline text-xl text-primary/80">Narrative</h2>
-              <div className="flex gap-2">
-                {gameState.narrativeDeck.length > 0 ? (
-                  <GameCard 
-                      key={gameState.narrativeDeck[0].id} 
-                      card={gameState.narrativeDeck[0]}
-                      source={`narrative-0`}
-                      isDraggable={gameState.gameStatus === 'playing'}
-                    />
-                ) : <div className="w-24 h-36" />}
-              </div>
-            </div>
           </div>
 
+          {/* Center Column */}
           <div className="lg:col-span-2 flex flex-col gap-6">
               <div>
                 <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Memory Sequences</h2>
@@ -222,7 +209,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                   {gameState.memorySequences.map((sequence, index) => (
                     <CardSlot key={index} id={`sequence-${index}`} onDrop={handleDrop} suit={sequence.suit ?? undefined}>
                       {sequence.cards.length > 0 &&
-                        <GameCard card={sequence.cards.slice(-1)[0]} source={`sequence-${index}`} />
+                        <GameCard card={sequence.cards.slice(-1)[0]} source={`sequence-${index}`} isDraggable={false}/>
                       }
                     </CardSlot>
                   ))}
@@ -230,11 +217,28 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
               </div>
 
               <Separator />
+
+              <div>
+                <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Narrative Deck</h2>
+                <div className="flex justify-around flex-wrap gap-2 bg-primary/10 p-4 rounded-lg">
+                  {gameState.narrativeDeck.map((card, index) => (
+                      <CardSlot key={`narrative-slot-${index}`} id={`narrative-drop-${index}`} onDrop={() => {}}>
+                        {card && (
+                            <GameCard 
+                              card={card} 
+                              source={`narrative-${index}`}
+                              isDraggable={gameState.gameStatus === 'playing'}
+                            />
+                        )}
+                      </CardSlot>
+                  ))}
+                </div>
+              </div>
               
               <div>
                 <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Play Area</h2>
                 <div className="space-y-4">
-                    <div className="flex justify-around flex-wrap gap-2 bg-primary/10 p-4 rounded-lg">
+                    <div className="flex justify-around flex-wrap gap-2">
                       {gameState.playDeck[0].map((card, index) => (
                         <CardSlot key={`play-slot-0-${index}`} id={`play-0-${index}`} onDrop={() => {}}>
                           {card && (
@@ -258,6 +262,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
               </div>
           </div>
           
+          {/* Right Column */}
           <div className="lg:col-span-1 flex flex-col gap-8 items-center lg:items-stretch">
             <div className="flex flex-row lg:flex-col gap-6 justify-around w-full">
                 <div className="space-y-2 text-center">
@@ -299,5 +304,3 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     </>
   );
 }
-
-    

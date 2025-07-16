@@ -26,7 +26,7 @@ export type MemorySequence = {
 export interface GameState {
   goals: Goal[];
   playDeck: (Card | null)[][];
-  narrativeDeck: Card[];
+  narrativeDeck: (Card | null)[];
   forgottenPile: Card[];
   memoryPiles: Record<Suit, MemoryPile>;
   memorySequences: MemorySequence[];

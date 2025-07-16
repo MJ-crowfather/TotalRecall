@@ -31,29 +31,15 @@ const generateGoals = (): Goal[] => {
     }));
 };
 
-const isFaceCard = (card: Card): boolean => {
-    return ['J', 'Q', 'K'].includes(card.rank);
-};
-
-
 export const setupGame = (): GameState => {
     const goals = generateGoals();
     let deck = shuffleDeck(createDeck());
     
-    // Deal Narrative Deck (4 non-face cards, except Aces are allowed)
-    const narrativeDeck: Card[] = [];
-    const tempMainDeck: Card[] = [];
-    let dealtCount = 0;
-
-    // We need to find 4 cards for the narrative deck
-    const narrativeCandidates = deck.filter(c => !isFaceCard(c) || c.rank === 'A');
-    const remainingDeck = deck.filter(c => isFaceCard(c) && c.rank !== 'A');
-    
-    narrativeDeck.push(...narrativeCandidates.splice(0, 4));
-    
-    // Reassemble the deck without the narrative cards and shuffle again
-    deck = shuffleDeck([...narrativeCandidates, ...remainingDeck]);
-
+    // Deal Narrative Deck (4 cards)
+    const narrativeDeck: (Card | null)[] = [];
+    for (let i = 0; i < 4; i++) {
+        narrativeDeck.push(deck.pop() ?? null);
+    }
 
     // Deal Play Deck (8 cards in 2 rows)
     const playDeck: (Card | null)[][] = [[], []];
@@ -69,7 +55,10 @@ export const setupGame = (): GameState => {
             }
         }
     }
-    // ensure the second row has 4 cards even if deck runs out
+    // Ensure both rows have 4 cards even if deck runs out
+    while (playDeck[0].length < 4) {
+        playDeck[0].push(null);
+    }
     while (playDeck[1].length < 4) {
         playDeck[1].push(null);
     }
@@ -93,5 +82,3 @@ export const setupGame = (): GameState => {
         history: [],
     };
 };
-
-    
