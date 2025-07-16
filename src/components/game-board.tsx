@@ -193,23 +193,25 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
               </div>
           </div>
 
-          <div className="lg:col-span-1 flex flex-col gap-6 items-center lg:items-stretch">
-            <div className="space-y-2">
-              <h2 className="font-headline text-xl text-primary/80">Main Deck</h2>
-              <CardBack count={gameState.mainDeck.length} />
-            </div>
-            <div className="space-y-2">
-              <h2 className="font-headline text-xl text-primary/80">Discard Pile</h2>
-                <CardSlot id="discard" onDrop={handleDrop}>
-                  {gameState.discardPile.length > 0 ? 
-                      <GameCard card={gameState.discardPile.slice(-1)[0]} source="discard" /> :
-                      <div className="w-24 h-36 rounded-lg border-2 border-dashed border-muted-foreground/50 flex items-center justify-center text-muted-foreground text-center p-2">Discard Area</div>
-                  }
-                </CardSlot>
-            </div>
-            <div className="space-y-2">
-              <h2 className="font-headline text-xl text-primary/80">Forgotten Pile</h2>
-              <CardBack pileName="Forgotten" count={gameState.forgottenPile.length} pile={gameState.forgottenPile} />
+          <div className="lg:col-span-1 flex flex-col gap-8 items-center lg:items-stretch">
+            <div className="flex flex-row lg:flex-col gap-6 justify-around w-full">
+                <div className="space-y-2 text-center">
+                  <h2 className="font-headline text-xl text-primary/80">Main Deck</h2>
+                  <CardBack count={gameState.mainDeck.length} />
+                </div>
+                <div className="space-y-2 text-center">
+                  <h2 className="font-headline text-xl text-primary/80">Discard Pile</h2>
+                    <CardSlot id="discard" onDrop={handleDrop}>
+                      {gameState.discardPile.length > 0 ? 
+                          <GameCard card={gameState.discardPile.slice(-1)[0]} source="discard" /> :
+                          <div className="w-24 h-36 rounded-lg border-2 border-dashed border-muted-foreground/50 flex items-center justify-center text-muted-foreground text-center p-2">Discard Area</div>
+                      }
+                    </CardSlot>
+                </div>
+                <div className="space-y-2 text-center">
+                  <h2 className="font-headline text-xl text-primary/80">Forgotten Pile</h2>
+                  <CardBack pileName="Forgotten" count={gameState.forgottenPile.length} pile={gameState.forgottenPile} />
+                </div>
             </div>
           </div>
         </div>
