@@ -22,7 +22,7 @@ const CARDS_PER_SET = 3;
 export function GameBoard({ initialGameState }: { initialGameState: GameState }) {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const { toast } = useToast();
-  const [gameOutcome, setGameOutcome]<'won' | 'lost' | null>(null);
+  const [gameOutcome, setGameOutcome] = useState<'won' | 'lost' | null>(null);
 
   const getCompletedSets = (pile: MemoryPile) => {
     return Math.floor(pile.cards.length / CARDS_PER_SET) + pile.completedWithQueens;
