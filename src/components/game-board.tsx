@@ -335,14 +335,14 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                         key={sequence.id} 
                         id={`narrative-${index}`} 
                         onDrop={handleDrop}
-                        className={isDiscardMode ? 'border-destructive' : ''}
+                        className={`relative ${isDiscardMode ? 'border-destructive' : ''}`}
                         suit={sequence.cards.length > 0 ? sequence.cards[0].suit : undefined}
                       >
                         {sequence.cards.map((c, i) => (
                           <div 
                             key={c.id} 
                             className="absolute" 
-                            style={{ top: `${i * 25}px`}}
+                            style={{ top: `${i * 25}px`, zIndex: i }}
                             onClick={isDiscardMode ? () => handleNarrativeCardClick(index) : undefined}
                           >
                             <GameCard 
