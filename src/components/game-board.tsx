@@ -128,7 +128,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
         if (card.rank === 'K') {
             setKingAction(card);
-            newState.forgottenPile.push(card);
             return newState;
         }
         if (card.rank === 'Q') {
@@ -146,7 +145,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           return newState;
         }
 
-        if (card.suit !== sequence.cards[0].suit) {
+        if (sequence.cards.length > 0 && card.suit !== sequence.cards[0].suit) {
           toast({ title: "Invalid Move", description: `This sequence is for ${sequence.cards[0].suit}.`, variant: "destructive" });
           return prevState;
         }
@@ -296,8 +295,15 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     // Kings are handled by click, not drag
     if (card.rank === 'K') return false; 
 
-    // Top row is always playable.
-    if (rowIndex === 0) return true;
+    // A card in row 0 is only playable if its index corresponds to the first non-null card from left to right.
+    if (rowIndex === 0) {
+        for (let i = 0; i < colIndex; i++) {
+            if (gameState.playDeck[0][i] !== null) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     // A card in the bottom row is playable only if the card above it is gone.
     const cardAbove = gameState.playDeck[0][colIndex];
@@ -341,7 +347,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                           >
                             <GameCard 
                               card={c} 
-                              source={`${sequence.id}-card-${i}`} 
+                              source={`narrative-card-${index}`} 
                               isDraggable={false}
                               className={isDiscardMode ? 'cursor-pointer hover:border-destructive hover:shadow-lg' : ''}
                             />
