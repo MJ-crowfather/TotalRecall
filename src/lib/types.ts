@@ -13,13 +13,18 @@ export interface Goal {
   id: Suit;
 }
 
+export type MemoryPile = {
+  cards: Card[];
+  completedWithQueens: number;
+};
+
 export interface GameState {
   goals: Goal[];
   playDeck: (Card | null)[][];
   narrativeDeck: Card[];
   discardPile: Card[];
   forgottenPile: Card[];
-  memoryPiles: Record<Suit, Card[]>;
+  memoryPiles: Record<Suit, MemoryPile>;
   mainDeck: Card[];
   gameStatus: 'playing' | 'won' | 'lost';
   startTime: number;

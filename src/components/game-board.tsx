@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
-import { GameState, Card, Suit, Goal } from '@/lib/types';
+import { GameState, Card, Suit, Goal, MemoryPile } from '@/lib/types';
 import { GameCard } from '@/components/game-card';
 import { GoalDisplay } from '@/components/goal-display';
 import { CardSlot } from '@/components/card-slot';
@@ -22,12 +22,16 @@ const CARDS_PER_SET = 3;
 export function GameBoard({ initialGameState }: { initialGameState: GameState }) {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const { toast } = useToast();
-  const [gameOutcome, setGameOutcome] = useState<'won' | 'lost' | null>(null);
+  const [gameOutcome, setGameOutcome]<'won' | 'lost' | null>(null);
 
-  const checkWinCondition = (goals: Goal[], memoryPiles: Record<Suit, Card[]>) => {
+  const getCompletedSets = (pile: MemoryPile) => {
+    return Math.floor(pile.cards.length / CARDS_PER_SET) + pile.completedWithQueens;
+  };
+
+  const checkWinCondition = (goals: Goal[], memoryPiles: Record<Suit, MemoryPile>) => {
     return goals.every(goal => {
-      const requiredCards = goal.count * CARDS_PER_SET;
-      return memoryPiles[goal.suit].length === requiredCards;
+      const completedSets = getCompletedSets(memoryPiles[goal.suit]);
+      return completedSets === goal.count;
     });
   };
 
@@ -56,20 +60,27 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
       if (target.startsWith('memory-')) {
         const suit = target.split('-')[1] as Suit;
-        if (card.suit !== suit) {
+        if (card.suit !== suit && card.rank !== 'Q') {
            toast({ title: "Invalid Move", description: `This card must be a ${suit}.`, variant: "destructive" });
            return prevState;
         }
 
         const goal = newState.goals.find(g => g.suit === suit)!;
-        const requiredCards = goal.count * CARDS_PER_SET;
-        if (newState.memoryPiles[suit].length >= requiredCards) {
-             toast({ title: "Invalid Move", description: `You have already completed all required sets for ${suit}.`, variant: "destructive" });
+        const pile = newState.memoryPiles[suit];
+        
+        if(card.rank === 'Q') {
+            pile.completedWithQueens++;
+        } else {
+            pile.cards.push(card);
+        }
+        
+        const completedSets = getCompletedSets(pile);
+
+        if (completedSets > goal.count) {
+             toast({ title: "Game Over", description: `You have created too many sets for ${suit}.`, variant: "destructive" });
              newState.gameStatus = 'lost';
              return newState;
         }
-
-        newState.memoryPiles[suit].push(card);
 
         if (checkWinCondition(newState.goals, newState.memoryPiles)) {
           newState.gameStatus = 'won';
@@ -140,8 +151,8 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                 <div className="flex justify-around bg-primary/10 p-4 rounded-lg flex-wrap gap-2">
                   {['spades', 'hearts', 'clubs', 'diamonds'].map(suit => (
                     <CardSlot key={suit} id={`memory-${suit}`} onDrop={handleDrop} suit={suit as Suit}>
-                      {gameState.memoryPiles[suit as Suit].length > 0 &&
-                        <GameCard card={gameState.memoryPiles[suit as Suit].slice(-1)[0]} source={`memory-${suit}`} />
+                      {gameState.memoryPiles[suit as Suit].cards.length > 0 &&
+                        <GameCard card={gameState.memoryPiles[suit as Suit].cards.slice(-1)[0]} source={`memory-${suit}`} />
                       }
                     </CardSlot>
                   ))}

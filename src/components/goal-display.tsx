@@ -1,4 +1,4 @@
-import { Goal, Suit, Card } from "@/lib/types";
+import { Goal, Suit, MemoryPile } from "@/lib/types";
 import { ClubIcon, DiamondIcon, HeartIcon, SpadeIcon } from "./icons";
 import { Card as UICard, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -14,10 +14,15 @@ const CARDS_PER_SET = 3;
 
 interface GoalDisplayProps {
   goals: Goal[];
-  memoryPiles: Record<Suit, Card[]>;
+  memoryPiles: Record<Suit, MemoryPile>;
 }
 
 export function GoalDisplay({ goals, memoryPiles }: GoalDisplayProps) {
+
+  const getCompletedSets = (pile: MemoryPile) => {
+    return Math.floor(pile.cards.length / CARDS_PER_SET) + pile.completedWithQueens;
+  };
+
   return (
     <UICard>
       <CardHeader>
@@ -26,7 +31,8 @@ export function GoalDisplay({ goals, memoryPiles }: GoalDisplayProps) {
       <CardContent className="space-y-4">
         {goals.map(goal => {
           const SuitIcon = suitIcons[goal.suit];
-          const currentSets = Math.floor(memoryPiles[goal.suit].length / CARDS_PER_SET);
+          const pile = memoryPiles[goal.suit];
+          const currentSets = getCompletedSets(pile);
           const totalSetsRequired = goal.count;
           const progress = totalSetsRequired > 0 ? (currentSets / totalSetsRequired) * 100 : (currentSets > 0 ? 100 : 0);
           const isComplete = totalSetsRequired > 0 && currentSets >= totalSetsRequired;

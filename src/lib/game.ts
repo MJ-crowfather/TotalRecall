@@ -41,7 +41,6 @@ export const setupGame = (): GameState => {
     
     // Deal Narrative Deck (4 non-face cards, except Aces)
     const narrativeDeck: Card[] = [];
-    const tempDeck: Card[] = [];
     
     let tempMainDeck = [...deck];
     let narrativeCandidates = tempMainDeck.filter(c => !isFaceCard(c));
@@ -71,7 +70,12 @@ export const setupGame = (): GameState => {
         narrativeDeck,
         discardPile: [],
         forgottenPile: [],
-        memoryPiles: { spades: [], hearts: [], clubs: [], diamonds: [] },
+        memoryPiles: { 
+            spades: { cards: [], completedWithQueens: 0 }, 
+            hearts: { cards: [], completedWithQueens: 0 }, 
+            clubs: { cards: [], completedWithQueens: 0 }, 
+            diamonds: { cards: [], completedWithQueens: 0 } 
+        },
         mainDeck: deck,
         gameStatus: 'playing',
         startTime: Date.now(),
