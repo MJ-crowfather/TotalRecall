@@ -148,17 +148,10 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         const seqIndex = parseInt(target.split('-')[1]);
         const sequence = newState.narrativeDeck[seqIndex];
 
-        // Handle Royal cards
         if (card.rank === 'K') {
             setKingAction(card);
-            // We need to put the state back as it was before the drag, since king is a special action.
-            // This is complex, might be better to handle King via click instead of drag-drop.
-            // For now, let's just return the previous state. The card will snap back.
-            // A better solution is needed here. Let's assume for now the user just clicks a king.
-            // For drag-drop, we will just put the king in the forgotten pile for now.
-             newState.forgottenPile.push(card);
-             setKingAction(card);
-             return newState; // Return and show dialog
+            newState.forgottenPile.push(card);
+            return newState;
         }
         if (card.rank === 'Q') {
           const pile = newState.memoryPiles[card.suit];
@@ -176,7 +169,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         }
 
         if (sequence.cards.length === 0) {
-           toast({ title: "Invalid Move", description: "This narrative sequence is complete.", variant: "destructive" });
+           toast({ title: "Invalid Move", description: "This narrative sequence is empty.", variant: "destructive" });
            return prevState;
         }
 
@@ -254,13 +247,25 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         for (let i = 0; i < newState.playDeck.length; i++) {
             for (let j = 0; j < newState.playDeck[i].length; j++) {
                 if (newState.playDeck[i][j]?.id === card.id) {
-                    newState.playDeck[i][j] = null; // A simplified removal, might need cascading logic later
+                    // Logic for replacing the card in the play deck
+                    if (i === 0) {
+                        const cardBelow = newState.playDeck[1][j];
+                        newState.playDeck[0][j] = cardBelow;
+                        newState.playDeck[1][j] = newState.mainDeck.pop() ?? null;
+                    } else {
+                        newState.playDeck[i][j] = null;
+                    }
                     kingFound = true;
                     break;
                 }
             }
             if(kingFound) break;
         }
+
+        if (!kingFound) {
+            console.error("King card not found in play deck to remove.");
+        }
+
 
         newState.forgottenPile.push(card);
 
@@ -316,7 +321,8 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     const card = gameState.playDeck[rowIndex][colIndex];
     if (card === null) return false;
     
-    if (card.rank === 'K') return false; // Kings are handled by click
+    // Kings are handled by click, not drag
+    if (card.rank === 'K') return false; 
 
     // Top row is playable.
     if (rowIndex === 0) return true;
