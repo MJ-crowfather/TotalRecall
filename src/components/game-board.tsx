@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import Link from 'next/link';
 import { Button } from './ui/button';
+import { setupGame } from '@/lib/game';
 
 type DraggableData = {
   card: Card;
@@ -92,42 +93,53 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
       let cardFoundAndRemoved = false;
       
+      // Handle card removal from source
       if (source.startsWith('play-')) {
         const [_, rowStr, colStr] = source.split('-');
         const row = parseInt(rowStr);
         const col = parseInt(colStr);
 
         if (newState.playDeck[row]?.[col]?.id === card.id) {
-            if (row === 0) {
-                const cardBelow = newState.playDeck[1][col];
-                newState.playDeck[0][col] = cardBelow;
-                newState.playDeck[1][col] = newState.mainDeck.pop() ?? null;
-            } else {
-                 newState.playDeck[row][col] = null;
+            // Differentiate between PLAY and DISCARD
+            if (target === 'forgotten') { // This is a DISCARD
+                newState.playDeck[row][col] = null;
+            } else { // This is a PLAY
+                if (row === 0) {
+                    const cardBelow = newState.playDeck[1][col];
+                    newState.playDeck[0][col] = cardBelow;
+                    newState.playDeck[1][col] = newState.mainDeck.pop() ?? null;
+                } else {
+                     newState.playDeck[row][col] = null;
+                }
             }
-          cardFoundAndRemoved = true;
+            cardFoundAndRemoved = true;
         }
       } else if (source.startsWith('narrative-card-')) {
           const index = parseInt(source.split('-')[2]);
-          if (newState.narrativeDeck[index].cards[0].id === card.id) {
-            newState.narrativeDeck[index].cards.shift();
+          if(newState.narrativeDeck[index].cards.length === 1 && newState.narrativeDeck[index].cards[0].id === card.id) {
+            const newCard = newState.mainDeck.pop();
+            newState.narrativeDeck[index].cards = newCard ? [newCard] : [];
             cardFoundAndRemoved = true;
+          } else {
+            // This prevents dragging cards that are part of a sequence
+            toast({ title: "Invalid Move", description: "Cannot move cards that are part of a sequence.", variant: "destructive" });
+            return prevState;
           }
-      } else {
+      } 
+      
+      if (!cardFoundAndRemoved) {
         console.warn("Card not found at source, aborting drop.", {card, source});
         return prevState; 
       }
-
-      if (!cardFoundAndRemoved) {
-        return prevState;
-      }
       
+      // Handle card placement at target
       if (target.startsWith('narrative-')) {
         const seqIndex = parseInt(target.split('-')[1]);
         const sequence = newState.narrativeDeck[seqIndex];
 
         if (card.rank === 'K') {
             setKingAction(card);
+            newState.forgottenPile.push(card); // King is spent
             return newState;
         }
         if (card.rank === 'Q') {
@@ -161,7 +173,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         const maxRank = Math.max(...ranksInSequence);
 
         if (sequence.cards.length === 1) {
-            if (Math.abs(cardRankValue - minRank) > 2) {
+            if (Math.abs(cardRankValue - minRank) > 2 || Math.abs(cardRankValue-minRank) === 0) {
                 toast({ title: "Invalid Move", description: "Card rank is too far to form a set.", variant: "destructive" });
                 return prevState;
             }
@@ -169,17 +181,17 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
             const isBetween = cardRankValue > minRank && cardRankValue < maxRank;
             const isAdjacent = cardRankValue === minRank - 1 || cardRankValue === maxRank + 1;
             
-            if (maxRank - minRank === 1) { 
-                if(!isAdjacent) {
+            if (maxRank - minRank === 1) { // e.g. 5, 6
+                if(!isAdjacent) { // requires 4 or 7
                     toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
                     return prevState;
                 }
-            } else if (maxRank - minRank === 2) { 
-                 if(!isBetween) {
+            } else if (maxRank - minRank === 2) { // e.g. 5, 7
+                 if(!isBetween) { // requires 6
                     toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
                     return prevState;
                  }
-            } else { 
+            } else { // e.g. 5, 8 - invalid state
                 toast({ title: "Invalid Move", description: "This card does not fit the sequence.", variant: "destructive" });
                 return prevState;
             }
@@ -192,10 +204,22 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       } else if (target === 'forgotten') {
         newState.forgottenPile.push(card);
       } else {
+        // This case handles drops on invalid targets, like the play area itself
+        // Since the card was already removed from its source, we need to log it as an invalid move
+        // and discard the card to prevent it from disappearing.
         toast({ title: "Invalid Move", description: "This is not a valid placement for the card.", variant: "destructive" });
-        return prevState;
+        newState.forgottenPile.push(card); // Effectively discards the card
       }
       
+      const topRowEmpty = newState.playDeck[0].every(c => c === null);
+      if (topRowEmpty) {
+        newState.playDeck[0] = newState.playDeck[1];
+        newState.playDeck[1] = [];
+        for (let i = 0; i < 4; i++) {
+            newState.playDeck[1].push(newState.mainDeck.pop() ?? null);
+        }
+      }
+
       if (checkWinCondition(newState)) {
         newState.gameStatus = 'won';
       }
@@ -236,7 +260,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
         if (!kingFound) {
             console.error("King card not found in play deck to remove.");
-            // Even if not found, proceed to avoid getting stuck
         }
 
 
@@ -253,6 +276,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
   const handleNarrativeCardClick = (index: number) => {
     if (!isDiscardMode) return;
+
+    if (gameState.narrativeDeck[index].cards.length > 1) {
+        toast({ title: "Cannot Discard", description: "Cannot discard a pile that is already part of a sequence.", variant: "destructive" });
+        return;
+    }
+
     setConfirmDiscard(index);
   };
   
@@ -292,9 +321,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     const card = gameState.playDeck[rowIndex][colIndex];
     if (!card) return false;
 
-    // Kings are handled by click, not drag
-    if (card.rank === 'K') return false; 
-
     // A card in row 0 is only playable if its index corresponds to the first non-null card from left to right.
     if (rowIndex === 0) {
         for (let i = 0; i < colIndex; i++) {
@@ -328,7 +354,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           <div className="lg:col-span-2 flex flex-col gap-6">
               <div className="bg-primary/10 p-4 rounded-lg space-y-8">
                 <div>
-                  <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Narrative Deck</h2>
+                  <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Memory Sequences</h2>
                   <div className="flex justify-around flex-wrap gap-2">
                     {gameState.narrativeDeck.map((sequence, index) => (
                       <CardSlot 
@@ -363,13 +389,13 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                   <div className="space-y-4">
                       <div className="flex justify-around flex-wrap gap-2">
                         {gameState.playDeck[0].map((card, index) => (
-                          <CardSlot key={`play-slot-0-${index}`} id={`forgotten-play-area-top-${index}`} onDrop={handleDrop}>
+                          <CardSlot key={`play-slot-0-${index}`} id={`play-0-${index}`} onDrop={() => {}}>
                             {card && (
                                 <GameCard 
                                   card={card} 
                                   source={`play-0-${index}`}
                                   isDraggable={isPlayable(0, index)}
-                                  onClick={card.rank === 'K' ? () => handleKingClick(card) : undefined}
+                                  onClick={card.rank === 'K' && isPlayable(0,index) ? () => handleKingClick(card) : undefined}
                                 />
                             )}
                           </CardSlot>
@@ -382,7 +408,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                               card={card} 
                               source={`play-1-${index}`} 
                               isDraggable={isPlayable(1, index)}
-                              onClick={card.rank === 'K' ? () => handleKingClick(card) : undefined}
+                              onClick={card.rank === 'K' && isPlayable(1,index) ? () => handleKingClick(card) : undefined}
                             />}
                           </CardSlot>
                         ))}
@@ -426,7 +452,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           </AlertDialogHeader>
           <AlertDialogFooter>
              <Link href="/" passHref>
-                <AlertDialogAction>Main Menu</AlertDialogAction>
+                <Button>Main Menu</Button>
              </Link>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -441,8 +467,11 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                   </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                  <Button variant="outline" onClick={() => handleKingAction('discardNarrative', kingAction!)}>Discard a Narrative Pile</Button>
-                  <Button onClick={() => handleKingAction('discardKing', kingAction!)}>Just Discard King</Button>
+                  <Button variant="outline" onClick={() => handleKingAction('discardNarrative', kingAction!)}>Discard a Narrative Card</Button>
+                  <Button onClick={() => {
+                    handleKingAction('discardKing', kingAction!);
+                    setKingAction(null);
+                  }}>Just Discard King</Button>
               </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
@@ -452,15 +481,17 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           <AlertDialogHeader>
             <AlertDialogTitle className="font-headline text-2xl">Confirm Discard</AlertDialogTitle>
             <AlertDialogDescription>
-                Are you sure you want to discard this entire pile from the narrative deck? This cannot be undone.
+                Are you sure you want to discard this card from the narrative deck? This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => handleConfirmDiscard(false)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleConfirmDiscard(true)}>Discard Pile</AlertDialogAction>
+            <AlertDialogAction onClick={() => handleConfirmDiscard(true)}>Discard Card</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </>
   );
 }
+
+    
