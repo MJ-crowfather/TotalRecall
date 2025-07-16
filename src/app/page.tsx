@@ -28,7 +28,7 @@ export default function Home() {
             </p>
             <ul className="list-disc pl-5 space-y-1 text-sm">
                 <li><span className="font-bold">King:</span> Discard a card from your narrative deck.</li>
-                <li><span className="font-bold">Queen:</span> Acts as a wild card to complete any set.</li>
+                <li><span className="font-bold">Queen:</span> Instantly completes a memory set for any suit.</li>
                 <li><span className="font-bold">Jack:</span> Remove a card from a sequence or draw from the forgotten pile.</li>
             </ul>
             <p>
