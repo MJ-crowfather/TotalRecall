@@ -1,4 +1,4 @@
-import { type Suit, type Rank, type Card, type Goal, type GameState } from './types';
+import { type Suit, type Rank, type Card, type Goal, type GameState, type NarrativeSequence } from './types';
 
 const SUITS: Suit[] = ['spades', 'hearts', 'clubs', 'diamonds'];
 const RANKS: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
@@ -37,7 +37,7 @@ export const setupGame = (): GameState => {
     let deck = shuffleDeck(createDeck());
     
     // Deal Narrative Deck (4 cards), ensuring no royal cards
-    const narrativeDeck: (Card | null)[] = [];
+    const narrativeDeck: NarrativeSequence[] = [];
     const tempHeldRoyals: Card[] = [];
 
     while (narrativeDeck.length < 4 && deck.length > 0) {
@@ -46,7 +46,7 @@ export const setupGame = (): GameState => {
             if (ROYAL_RANKS.includes(card.rank)) {
                 tempHeldRoyals.push(card);
             } else {
-                narrativeDeck.push(card);
+                narrativeDeck.push({ id: `narrative-${narrativeDeck.length}`, cards: [card]});
             }
         }
     }
@@ -74,7 +74,6 @@ export const setupGame = (): GameState => {
             clubs: { cards: [], completedWithQueens: 0 }, 
             diamonds: { cards: [], completedWithQueens: 0 } 
         },
-        memorySequences: Array(4).fill(null).map(() => ({ cards: [], suit: null })),
         mainDeck: deck,
         gameStatus: 'playing',
         startTime: Date.now(),
