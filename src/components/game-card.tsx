@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Card as CardType, Suit } from "@/lib/types";
@@ -26,11 +27,14 @@ interface GameCardProps {
   className?: string;
 }
 
-export function GameCard({ card, source, isDraggable = false, className }: GameCardProps) {
+export function GameCard({ card, source, isDraggable = true, className }: GameCardProps) {
   const SuitIcon = suitIcons[card.suit];
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!isDraggable) return;
+    if (!isDraggable) {
+        e.preventDefault();
+        return;
+    };
     const data = { card, source };
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("application/json", JSON.stringify(data));
@@ -42,8 +46,7 @@ export function GameCard({ card, source, isDraggable = false, className }: GameC
       onDragStart={handleDragStart}
       className={cn(
         "w-24 h-36 bg-card rounded-lg p-2 flex flex-col justify-between shadow-md border",
-        isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "opacity-90",
-        isDraggable === false && card.rank !== 'A' && card.rank !== 'K' && card.rank !== 'Q' && card.rank !== 'J' ? "cursor-not-allowed" : "",
+        isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "cursor-not-allowed",
         suitColors[card.suit],
         className
       )}
