@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
-  title: 'Memory Lane',
+  title: 'Recall',
   description: 'A solitaire card game of memory and strategy.',
 };
 

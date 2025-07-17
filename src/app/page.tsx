@@ -7,7 +7,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
       <div className="flex flex-col items-center text-center space-y-8">
         <h1 className="text-8xl md:text-9xl font-headline text-primary tracking-wider">
-          Memory Lane
+          Recall
         </h1>
         <Card className="max-w-2xl shadow-lg">
           <CardHeader>

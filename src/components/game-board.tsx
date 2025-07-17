@@ -326,7 +326,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     <>
       <div className="flex flex-col h-full gap-4 max-w-7xl mx-auto">
         <header className="flex justify-between items-center flex-wrap gap-4">
-          <h1 className="text-4xl font-headline text-primary">Memory Lane</h1>
+          <h1 className="text-4xl font-headline text-primary">Recall</h1>
           <GameTimer startTime={gameState.startTime} isRunning={gameState.gameStatus === 'playing'} />
         </header>
 
