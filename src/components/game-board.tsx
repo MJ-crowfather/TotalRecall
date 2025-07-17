@@ -56,7 +56,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
       const suit = nonJokers[0].suit as Suit;
       
-      // Separate jokers and numbered cards
       const jokers = sequence.cards.filter(c => c.rank === 'Joker');
       const numberedCards = nonJokers.map(c => ({...c, rankValue: getRankValue(c.rank)}));
       numberedCards.sort((a, b) => a.rankValue - b.rankValue);
@@ -74,12 +73,9 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           isSet = true; // Needs 2 jokers. any card + 2 jokers is a set.
       }
 
-
       if (isSet) {
         const pile = newState.memoryPiles[suit];
-
         pile.cards.push(...sequence.cards);
-        
         sequence.cards = []; // Leave the slot empty
         
         toast({ title: "Set Complete!", description: `A set of ${suit} has been moved to your memory.`});
@@ -113,15 +109,17 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       const { card, source } = data;
       
       let cardFoundAndRemoved = false;
+      let cardRow = -1;
+      let cardCol = -1;
       
       // Card removal logic from Play Deck
       if (source.startsWith('play-')) {
         const [_, rowStr, colStr] = source.split('-');
-        const row = parseInt(rowStr);
-        const col = parseInt(colStr);
+        cardRow = parseInt(rowStr);
+        cardCol = parseInt(colStr);
 
-        if (newState.playDeck[row]?.[col]?.id === card.id) {
-            newState.playDeck[row][col] = null;
+        if (newState.playDeck[cardRow]?.[cardCol]?.id === card.id) {
+            // We don't set to null yet. We do it based on the drop target.
             cardFoundAndRemoved = true;
         }
       }
@@ -130,6 +128,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         return prevState; 
       }
       
+      // Handle the drop action
       if (target.startsWith('narrative-')) {
         const seqIndex = parseInt(target.split('-')[1]);
         const sequence = newState.narrativeDeck[seqIndex];
@@ -164,17 +163,17 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                 const isBetween = cardRankValue > minRank && cardRankValue < maxRank;
                 const rankDiff = maxRank - minRank;
 
-                if(rankDiff === 1) { // e.g., 6, 7. Needs 5 or 8.
+                if(rankDiff === 1) { 
                     if (!isAdjacent) {
                         toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
                         return prevState;
                     }
-                } else if (rankDiff === 2) { // e.g., 6, 8. Needs 7.
+                } else if (rankDiff === 2) {
                     if (!isBetween) {
                         toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
                         return prevState;
                     }
-                } else { // Should not happen with the rank diff check above, but as a fallback.
+                } else {
                     toast({ title: "Invalid Move", description: "This card does not fit the sequence.", variant: "destructive" });
                     return prevState;
                 }
@@ -182,15 +181,21 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         }
         
         sequence.cards.push(card);
+        
+        // This is a "Play", so cascade the column
+        newState.playDeck[cardRow][cardCol] = newState.playDeck[1][cardCol];
+        newState.playDeck[1][cardCol] = newState.mainDeck.pop() ?? null;
+        
         const lossOccurred = processNarrativeSet(newState, seqIndex);
         if (lossOccurred) return newState;
 
       } else if (target === 'forgotten') {
+        // This is a "Discard", so just empty the slot
         newState.forgottenPile.push(card);
+        newState.playDeck[cardRow][cardCol] = null;
       } else {
-         // This case handles invalid drops that still removed a card (e.g. dropping a queen somewhere invalid)
-         // We should ensure the card is returned or forgotten. For simplicity, we forget it.
-         newState.forgottenPile.push(card);
+         // Invalid drop, return to original state
+         return prevState;
       }
       
       if (checkWinCondition(newState)) {
@@ -199,7 +204,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
       return newState;
     });
-  }, [toast, getCompletedSets, checkWinCondition, processNarrativeSet]);
+  }, [toast, checkWinCondition, processNarrativeSet]);
 
   const handleKingClick = (card: Card) => {
     if (gameState.gameStatus !== 'playing') return;
@@ -218,7 +223,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         const newState = JSON.parse(JSON.stringify(prevState));
         let kingFound = false;
 
-        // Remove King from play deck, leaving the spot empty
         for (let i = 0; i < newState.playDeck.length; i++) {
             for (let j = 0; j < newState.playDeck[i].length; j++) {
                 if (newState.playDeck[i][j]?.id === card.id) {
@@ -233,7 +237,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         if (!kingFound) {
             console.error("King card not found in play deck to remove.");
         }
-
 
         newState.forgottenPile.push(card);
 
@@ -275,7 +278,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       if (action === 'completeSet') {
           if (card.suit === 'joker') {
              toast({ title: "Invalid Action", description: "A Joker Queen cannot be used this way.", variant: "destructive" });
-             return prevState; // Should not happen, but safeguard.
+             return prevState; 
           }
           const pile = newState.memoryPiles[card.suit];
           pile.completedWithQueens++;
@@ -331,7 +334,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     }
   }, [gameState.gameStatus]);
   
-  // Effect to check for game loss condition
   useEffect(() => {
     if (gameState.gameStatus !== 'playing') return;
     
@@ -346,18 +348,17 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
   }, [gameState, checkWinCondition, toast]);
   
-  // Effect to handle play area cascade
   useEffect(() => {
     if (gameState.gameStatus !== 'playing') return;
 
-    // A cascade happens when the top row is empty AND the main deck has cards.
+    // This is the full row cascade, when the top row is discarded.
     const topRowEmpty = gameState.playDeck[0].every(card => card === null);
 
     if (topRowEmpty && gameState.mainDeck.length > 0) {
       setGameState(prevState => {
         // Double check condition inside state update to prevent race conditions
         const isTopRowActuallyEmpty = prevState.playDeck[0].every(card => card === null);
-        if (!isTopRowActuallyEmpty || prevState.mainDeck.length === 0) return prevState;
+        if (!isTopRowActuallyEmpty) return prevState;
 
         const newState = JSON.parse(JSON.stringify(prevState));
         
@@ -367,7 +368,8 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         // Deal 4 new cards to the bottom row
         newState.playDeck[1] = [];
         for (let i = 0; i < 4; i++) {
-          newState.playDeck[1].push(newState.mainDeck.pop() ?? null);
+          const newCard = newState.mainDeck.pop();
+          newState.playDeck[1].push(newCard ?? null);
         }
 
         toast({ title: "Play Area Refreshed", description: "New cards have been dealt." });
@@ -375,20 +377,29 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         return newState;
       });
     }
-  }, [gameState.playDeck, gameState.mainDeck, gameState.gameStatus, toast]);
+  }, [gameState.playDeck, gameState.mainDeck.length, gameState.gameStatus, toast]);
 
   const isPlayable = (rowIndex: number, colIndex: number): boolean => {
     if (gameState.gameStatus !== 'playing') return false;
     const card = gameState.playDeck[rowIndex][colIndex];
     if (!card) return false;
 
-    // A card in the bottom row is playable only if the card directly above it is null
+    // Bottom row cards are never directly playable
     if (rowIndex === 1) {
-      return gameState.playDeck[0][colIndex] === null;
+      return false;
     }
     
-    // A card in the top row is playable
-    return true;
+    // Top row cards are playable if all cards to their left are null
+    if (rowIndex === 0) {
+      for (let i = 0; i < colIndex; i++) {
+        if (gameState.playDeck[0][i] !== null) {
+          return false;
+        }
+      }
+      return true;
+    }
+    
+    return false; // Should not be reached
   };
   
   return (
@@ -475,7 +486,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                             {card && <GameCard 
                               card={card} 
                               source={`play-1-${index}`} 
-                              isDraggable={isPlayable(1, index) && card.rank !== 'K' && card.rank !== 'Q'}
+                              isDraggable={isPlayable(1, index)}
                               onClick={
                                 isPlayable(1,index) ?
                                   card.rank === 'K' ? () => handleKingClick(card) :
@@ -579,3 +590,5 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     </>
   );
 }
+
+    
