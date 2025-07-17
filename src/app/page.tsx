@@ -11,7 +11,7 @@ export default function Home() {
         </h1>
         <Card className="max-w-2xl shadow-lg">
           <CardHeader>
-            <CardTitle className="text-3xl font-headline text-primary/90">A Solitaire Card Game</CardTitle>
+            <CardTitle className="text-3xl font-headline text-primary/90">A Card Game</CardTitle>
             <CardDescription className="font-body text-muted-foreground pt-2">
               Welcome to the corridors of your mind. Piece together forgotten memories before they fade away forever.
             </CardDescription>
