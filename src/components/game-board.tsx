@@ -123,6 +123,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         if (newState.playDeck[row]?.[col]?.id === card.id) {
             // If card is played (to narrative), cascade. If discarded (to forgotten), don't.
             if (target.startsWith('narrative-')) {
+                // Card is played
                 if (row === 0) {
                     const cardBelow = newState.playDeck[1][col];
                     newState.playDeck[0][col] = cardBelow;
@@ -131,6 +132,10 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                      newState.playDeck[row][col] = null;
                 }
             } else if (target === 'forgotten') {
+                 // Card is discarded
+                 newState.playDeck[row][col] = null;
+            } else {
+                 // Invalid drop target for a play deck card, just discard it
                  newState.playDeck[row][col] = null;
             }
             cardFoundAndRemoved = true;
@@ -144,12 +149,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       if (target.startsWith('narrative-')) {
         const seqIndex = parseInt(target.split('-')[1]);
         const sequence = newState.narrativeDeck[seqIndex];
-
-        if (card.rank === 'K' || card.rank === 'Q') {
-            setKingAction(card);
-            newState.forgottenPile.push(card); 
-            return newState;
-        }
         
         const nonJokerCards = sequence.cards.filter(c => c.rank !== 'Joker');
         const sequenceSuit = nonJokerCards.length > 0 ? nonJokerCards[0].suit : (card.suit !== 'joker' ? card.suit : undefined);
@@ -317,7 +316,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
   const handleNarrativeCardClick = (index: number) => {
     if (!isDiscardMode) return;
-    if (gameState.narrativeDeck[index].cards.length === 0) return;
     setConfirmDiscard(index);
   };
   
@@ -343,12 +341,15 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     setIsDiscardMode(false);
   };
 
-
   useEffect(() => {
     if (gameState.gameStatus !== 'playing') {
       setGameOutcome(gameState.gameStatus);
-      return;
     }
+  }, [gameState.gameStatus]);
+  
+  // Effect to check for game loss condition
+  useEffect(() => {
+    if (gameState.gameStatus !== 'playing') return;
     
     const playDeckEmpty = gameState.playDeck.flat().every(c => c === null);
 
@@ -361,15 +362,43 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
   }, [gameState, checkWinCondition, toast]);
   
+  // Effect to handle play area cascade
+  useEffect(() => {
+    if (gameState.gameStatus !== 'playing') return;
+
+    const topRowEmpty = gameState.playDeck[0].every(card => card === null);
+
+    if (topRowEmpty) {
+      setGameState(prevState => {
+        // Only proceed if the top row is actually empty and we are not in the middle of another update
+        if (!prevState.playDeck[0].every(card => card === null)) return prevState;
+
+        const newState = JSON.parse(JSON.stringify(prevState));
+        
+        // Move bottom row to top row
+        newState.playDeck[0] = newState.playDeck[1];
+        
+        // Deal 4 new cards to the bottom row
+        newState.playDeck[1] = [];
+        for (let i = 0; i < 4; i++) {
+          newState.playDeck[1].push(newState.mainDeck.pop() ?? null);
+        }
+
+        toast({ title: "Play Area Refreshed", description: "New cards have been dealt." });
+
+        return newState;
+      });
+    }
+  }, [gameState.playDeck, gameState.gameStatus, toast]);
+
   const isPlayable = (rowIndex: number, colIndex: number): boolean => {
     if (gameState.gameStatus !== 'playing') return false;
     const card = gameState.playDeck[rowIndex][colIndex];
     if (!card) return false;
 
-    // A card in the top row is only playable if it's the first non-null card from the left
+    // A card in the top row is playable
     if (rowIndex === 0) {
-      const firstPlayableIndex = gameState.playDeck[0].findIndex(c => c !== null);
-      return colIndex === firstPlayableIndex;
+      return true;
     }
     
     // Bottom row card is playable only if the card directly above it is null
@@ -548,7 +577,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           <AlertDialogHeader>
             <AlertDialogTitle className="font-headline text-2xl">Confirm Discard</AlertDialogTitle>
             <AlertDialogDescription>
-                Are you sure you want to discard this pile from the narrative deck? This cannot be undone.
+                Are you sure you want to discard this entire pile from the narrative deck? This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
