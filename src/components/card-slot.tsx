@@ -54,9 +54,9 @@ export function CardSlot({ id, onDrop, children, className, suit }: CardSlotProp
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        "w-24 h-36 rounded-lg border-2 border-dashed border-muted-foreground/50 flex items-center justify-center transition-colors",
+        "w-24 h-36 rounded-lg flex items-center justify-center transition-colors",
         isOver ? "bg-accent/50 border-accent" : "",
-        children ? "border-solid border-transparent" : "",
+        children ? "border-solid border-transparent" : "border-2 border-dashed border-muted-foreground/50",
         className
       )}
     >
