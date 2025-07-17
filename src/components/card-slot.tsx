@@ -48,7 +48,7 @@ export function CardSlot({ id, onDrop, children, className, suit, hasVisibleCont
   };
 
   const SuitIcon = suit ? suitIcons[suit] : null;
-  const showBorder = !hasVisibleContent && !children;
+  const showBorder = !hasVisibleContent;
 
   return (
     <div
