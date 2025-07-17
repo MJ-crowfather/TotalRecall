@@ -43,20 +43,23 @@ export function GameCard({ card, source, isDraggable = true, className, onClick 
     e.dataTransfer.setData("application/json", JSON.stringify(data));
   };
 
+  const effectiveClassName = cn(
+    "w-24 h-36 bg-card rounded-lg p-2 flex flex-col justify-between shadow-md border",
+    isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "",
+    !isDraggable && !isClickable ? "cursor-not-allowed" : "",
+    isClickable ? "cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all" : "",
+    card.suit !== 'joker' ? suitColors[card.suit] : suitColors['joker'],
+    className
+  );
+
+
   if (card.rank === 'Joker') {
     return (
         <div
             draggable={isDraggable}
             onDragStart={handleDragStart}
             onClick={onClick}
-            className={cn(
-                "w-24 h-36 bg-card rounded-lg p-2 flex flex-col justify-between items-center shadow-md border",
-                isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "",
-                !isDraggable && !isClickable ? "cursor-not-allowed" : "",
-                isClickable ? "cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all" : "",
-                suitColors['joker'],
-                className
-            )}
+            className={effectiveClassName}
             title="Joker"
         >
             <div className="text-left w-full">
@@ -75,13 +78,7 @@ export function GameCard({ card, source, isDraggable = true, className, onClick 
       draggable={isDraggable}
       onDragStart={handleDragStart}
       onClick={onClick}
-      className={cn(
-        "w-24 h-36 bg-card rounded-lg p-2 flex flex-col justify-between shadow-md border",
-        isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "cursor-not-allowed",
-        isClickable ? "cursor-pointer" : "",
-        card.suit !== 'joker' && suitColors[card.suit],
-        className
-      )}
+      className={effectiveClassName}
       title={`${card.rank} of ${card.suit}`}
     >
       <div className="text-left">

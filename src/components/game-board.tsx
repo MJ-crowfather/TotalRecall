@@ -12,6 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import Link from 'next/link';
 import { Button } from './ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { ScrollArea } from './ui/scroll-area';
 
 type DraggableData = {
   card: Card;
@@ -28,8 +30,11 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   const [gameOutcome, setGameOutcome] = useState<'won' | 'lost' | null>(null);
   const [kingAction, setKingAction] = useState<Card | null>(null);
   const [queenAction, setQueenAction] = useState<Card | null>(null);
+  const [jackAction, setJackAction] = useState<{ card: Card, position: { row: number, col: number } } | null>(null);
   const [isDiscardMode, setIsDiscardMode] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState<number | null>(null);
+  const [showResurrectDialog, setShowResurrectDialog] = useState(false);
+
 
   const getRankValue = (rank: Rank): number => {
     if (rank === 'Joker') return -1; // Jokers are special
@@ -216,6 +221,11 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     setQueenAction(card);
   }
 
+  const handleJackClick = (card: Card, rowIndex: number, colIndex: number) => {
+    if (gameState.gameStatus !== 'playing') return;
+    setJackAction({ card, position: { row: rowIndex, col: colIndex } });
+  }
+
   const handleKingAction = (action: 'discardNarrative' | 'discardKing', card: Card) => {
       if (!card) return;
 
@@ -275,14 +285,14 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           return prevState;
       }
       
-      // Add queen to forgotten pile before it's removed from play deck
-      newState.forgottenPile.push(card);
-
       if (action === 'completeSet') {
           if (card.suit === 'joker') {
              toast({ title: "Invalid Action", description: "A Joker Queen cannot be used this way.", variant: "destructive" });
              return prevState; 
           }
+          
+          // Add queen to forgotten pile BEFORE it's removed from play deck
+          newState.forgottenPile.push(card);
           
           // This is a "Play", so cascade the column
           if (queenRow !== -1 && queenCol !== -1) {
@@ -307,6 +317,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         if (queenRow !== -1 && queenCol !== -1) {
             newState.playDeck[queenRow][queenCol] = null;
         }
+        newState.forgottenPile.push(card);
       }
       
       return newState;
@@ -314,6 +325,60 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
     setQueenAction(null);
   };
+
+  const handleJackAction = (action: 'discardJack' | 'resurrectCard') => {
+    if (!jackAction) return;
+    
+    if (action === 'discardJack') {
+        setGameState(prevState => {
+            const newState = JSON.parse(JSON.stringify(prevState));
+            const { card, position } = jackAction;
+
+            // Remove Jack from play deck and add to forgotten pile
+            newState.playDeck[position.row][position.col] = null;
+            newState.forgottenPile.push(card);
+
+            return newState;
+        });
+        setJackAction(null);
+    } else { // resurrectCard
+        if (gameState.forgottenPile.length === 0) {
+            toast({ title: "No Cards to Resurrect", description: "The forgotten pile is empty.", variant: "destructive" });
+            setJackAction(null);
+            return;
+        }
+        setShowResurrectDialog(true);
+    }
+  }
+
+  const handleResurrectSelect = (selectedCard: Card) => {
+      if (!jackAction) return;
+      
+      setGameState(prevState => {
+          const newState = JSON.parse(JSON.stringify(prevState));
+          const { card: jackCard, position } = jackAction;
+
+          // Find and remove selected card from forgotten pile
+          const cardIndex = newState.forgottenPile.findIndex(c => c.id === selectedCard.id);
+          if (cardIndex > -1) {
+              newState.forgottenPile.splice(cardIndex, 1);
+          }
+
+          // Add Jack to the forgotten pile
+          newState.forgottenPile.push(jackCard);
+          
+          // Place selected card in Jack's old spot
+          newState.playDeck[position.row][position.col] = selectedCard;
+          
+          toast({ title: "Card Resurrected!", description: `The ${selectedCard.rank} of ${selectedCard.suit} has been returned to play.` });
+
+          return newState;
+      });
+
+      // Close all dialogs
+      setShowResurrectDialog(false);
+      setJackAction(null);
+  }
 
 
   const handleNarrativeCardClick = (index: number) => {
@@ -404,17 +469,19 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       return false;
     }
     
-    // Top row cards are playable if all cards to their left are null
+    // Top row cards are playable if the card above it in the 0th row is null
     if (rowIndex === 0) {
-      for (let i = 0; i < colIndex; i++) {
-        if (gameState.playDeck[0][i] !== null) {
-          return false;
+        if(gameState.playDeck[0][colIndex-1] === null) {
+            return true;
         }
-      }
+    }
+    
+    // Card in the first column of the top row is always playable
+    if (rowIndex === 0 && colIndex === 0) {
       return true;
     }
     
-    return false; // Should not be reached
+    return false;
   };
   
   return (
@@ -482,11 +549,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                                 <GameCard 
                                   card={card} 
                                   source={`play-0-${index}`}
-                                  isDraggable={isPlayable(0, index) && card.rank !== 'K' && card.rank !== 'Q'}
+                                  isDraggable={isPlayable(0, index) && !['K', 'Q', 'J'].includes(card.rank)}
                                   onClick={
                                     isPlayable(0,index) ?
                                       card.rank === 'K' ? () => handleKingClick(card) :
                                       card.rank === 'Q' ? () => handleQueenClick(card) :
+                                      card.rank === 'J' ? () => handleJackClick(card, 0, index) :
                                       undefined
                                     : undefined
                                   }
@@ -502,10 +570,11 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                               card={card} 
                               source={`play-1-${index}`} 
                               isDraggable={isPlayable(1, index)}
-                              onClick={
+                               onClick={
                                 isPlayable(1,index) ?
                                   card.rank === 'K' ? () => handleKingClick(card) :
                                   card.rank === 'Q' ? () => handleQueenClick(card) :
+                                  card.rank === 'J' ? () => handleJackClick(card, 1, index) :
                                   undefined
                                 : undefined
                               }
@@ -569,6 +638,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
               <AlertDialogFooter>
                   <Button variant="outline" onClick={() => handleKingAction('discardNarrative', kingAction!)}>Discard a Narrative Pile</Button>
                   <Button onClick={() => handleKingAction('discardKing', kingAction!)}>Just Discard King</Button>
+                  <Button variant="ghost" onClick={() => setKingAction(null)}>Cancel</Button>
               </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
@@ -584,9 +654,43 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
               <AlertDialogFooter>
                   <Button variant="outline" onClick={() => handleQueenAction('completeSet', queenAction!)}>Complete a Memory Set</Button>
                   <Button onClick={() => handleQueenAction('discardQueen', queenAction!)}>Just Discard Queen</Button>
+                  <Button variant="ghost" onClick={() => setQueenAction(null)}>Cancel</Button>
               </AlertDialogFooter>
           </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!jackAction && !showResurrectDialog}>
+          <AlertDialogContent>
+              <AlertDialogHeader>
+                  <AlertDialogTitle className="font-headline text-2xl">Jack Power</AlertDialogTitle>
+                  <AlertDialogDescription>
+                      You have played the Jack of {jackAction?.card.suit}. Choose an action.
+                  </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                  <Button variant="outline" onClick={() => handleJackAction('resurrectCard')}>Resurrect a Card</Button>
+                  <Button onClick={() => handleJackAction('discardJack')}>Just Discard Jack</Button>
+                  <Button variant="ghost" onClick={() => setJackAction(null)}>Cancel</Button>
+              </AlertDialogFooter>
+          </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={showResurrectDialog} onOpenChange={setShowResurrectDialog}>
+          <DialogContent>
+              <DialogHeader>
+                  <DialogTitle className="font-headline text-2xl text-primary">Resurrect a Card</DialogTitle>
+              </DialogHeader>
+              <ScrollArea className="h-96">
+                  <div className="flex flex-wrap gap-4 justify-center p-4">
+                      {gameState.forgottenPile.map(card => (
+                          <div key={card.id} onClick={() => handleResurrectSelect(card)}>
+                              <GameCard card={card} source="resurrect-pile" isDraggable={false} className="cursor-pointer" />
+                          </div>
+                      ))}
+                  </div>
+              </ScrollArea>
+          </DialogContent>
+      </Dialog>
 
       <AlertDialog open={confirmDiscard !== null}>
         <AlertDialogContent>
