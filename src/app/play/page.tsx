@@ -1,6 +1,8 @@
 import { GameBoard } from '@/components/game-board';
 import { setupGame } from '@/lib/game';
 
+export const dynamic = 'force-dynamic';
+
 export default function PlayPage() {
   const initialGameState = setupGame();
 
