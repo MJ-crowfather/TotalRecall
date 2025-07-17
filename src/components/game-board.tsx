@@ -112,7 +112,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       const { card, source } = data;
       
       let cardFoundAndRemoved = false;
-      let cardWasPlayed = false; // Flag to check if the card was played vs discarded
+      let cardWasPlayed = false;
 
       if (source.startsWith('play-')) {
         const [_, rowStr, colStr] = source.split('-');
@@ -130,7 +130,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                      newState.playDeck[row][col] = null;
                 }
             } else { // DISCARDING
-                newState.playDeck[row][col] = null;
+                 newState.playDeck[row][col] = null;
             }
             cardFoundAndRemoved = true;
         }
@@ -150,6 +150,10 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
             return newState;
         }
         if (card.rank === 'Q') {
+          if (sequence.cards.length > 0) {
+              toast({ title: "Invalid Move", description: "Queens can only be played on an empty narrative slot.", variant: "destructive" });
+              return prevState;
+          }
           if (card.suit === 'joker') {
             toast({ title: "Invalid Move", description: "A Queen must belong to a suit.", variant: "destructive" });
             return prevState;
@@ -222,15 +226,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       } else if (target === 'forgotten') {
         newState.forgottenPile.push(card);
       } else {
-        // This case should not be hit if drags are only from playable cards,
-        // but as a fallback, we can add the card back to where it came from if the move is invalid.
-        // For now, we just push to forgotten pile as a default invalid move action.
         toast({ title: "Invalid Move", description: "This is not a valid placement for the card.", variant: "destructive" });
         newState.forgottenPile.push(card); 
       }
       
       const topRowEmpty = newState.playDeck[0].every(c => c === null);
-      if (topRowEmpty && !cardWasPlayed) { // This condition might need adjustment depending on desired gameplay for full row clears
+      if (topRowEmpty && !cardWasPlayed) {
         newState.playDeck[0] = newState.playDeck[1];
         newState.playDeck[1] = [];
         for (let i = 0; i < 4; i++) {
