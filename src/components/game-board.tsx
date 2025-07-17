@@ -79,7 +79,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
         pile.cards.push(...sequence.cards);
         
-        sequence.cards = [];
+        sequence.cards = []; // Leave the slot empty
         
         toast({ title: "Set Complete!", description: `A set of ${suit} has been moved to your memory.`});
 
@@ -231,7 +231,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
       }
       
       const topRowEmpty = newState.playDeck[0].every(c => c === null);
-      if (topRowEmpty && !cardWasPlayed) {
+      if (topRowEmpty && cardWasPlayed === false) {
         newState.playDeck[0] = newState.playDeck[1];
         newState.playDeck[1] = [];
         for (let i = 0; i < 4; i++) {
@@ -323,8 +323,19 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   useEffect(() => {
     if (gameState.gameStatus !== 'playing') {
       setGameOutcome(gameState.gameStatus);
+      return;
     }
-  }, [gameState.gameStatus]);
+    
+    const playDeckEmpty = gameState.playDeck.flat().every(c => c === null);
+
+    if (gameState.mainDeck.length === 0 && playDeckEmpty) {
+       if (!checkWinCondition(gameState)) {
+          setGameState(prevState => ({ ...prevState, gameStatus: 'lost' }));
+          toast({ title: "Game Over", description: "You have run out of cards and moves.", variant: "destructive" });
+       }
+    }
+
+  }, [gameState.gameStatus, gameState.mainDeck.length, gameState.playDeck, checkWinCondition, toast]);
   
   const isPlayable = (rowIndex: number, colIndex: number): boolean => {
     if (gameState.gameStatus !== 'playing') return false;
