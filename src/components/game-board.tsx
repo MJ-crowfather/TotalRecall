@@ -291,10 +291,8 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
              return prevState; 
           }
           
-          // Add queen to forgotten pile BEFORE it's removed from play deck
           newState.forgottenPile.push(card);
           
-          // This is a "Play", so cascade the column
           if (queenRow !== -1 && queenCol !== -1) {
               newState.playDeck[queenRow][queenCol] = newState.playDeck[1][queenCol];
               newState.playDeck[1][queenCol] = newState.mainDeck.pop() ?? null;
@@ -313,7 +311,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
              toast({ title: "Set Completed!", description: `You used the Queen to complete a set of ${card.suit}.` });
           }
       } else { // discardQueen
-        // This is a "Discard", so just empty the slot
         if (queenRow !== -1 && queenCol !== -1) {
             newState.playDeck[queenRow][queenCol] = null;
         }
@@ -334,7 +331,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
             const newState = JSON.parse(JSON.stringify(prevState));
             const { card, position } = jackAction;
 
-            // Remove Jack from play deck and add to forgotten pile
             newState.playDeck[position.row][position.col] = null;
             newState.forgottenPile.push(card);
 
@@ -358,16 +354,13 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           const newState = JSON.parse(JSON.stringify(prevState));
           const { card: jackCard, position } = jackAction;
 
-          // Find and remove selected card from forgotten pile
           const cardIndex = newState.forgottenPile.findIndex(c => c.id === selectedCard.id);
           if (cardIndex > -1) {
               newState.forgottenPile.splice(cardIndex, 1);
           }
 
-          // Add Jack to the forgotten pile
           newState.forgottenPile.push(jackCard);
           
-          // Place selected card in Jack's old spot
           newState.playDeck[position.row][position.col] = selectedCard;
           
           toast({ title: "Card Resurrected!", description: `The ${selectedCard.rank} of ${selectedCard.suit} has been returned to play.` });
@@ -375,7 +368,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           return newState;
       });
 
-      // Close all dialogs
       setShowResurrectDialog(false);
       setJackAction(null);
   }
@@ -396,7 +388,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
             if (sequenceToDiscard) {
                 newState.forgottenPile.push(...sequenceToDiscard.cards);
-                newState.narrativeDeck[confirmDiscard].cards = []; // Leave the spot empty
+                newState.narrativeDeck[confirmDiscard].cards = [];
                 toast({ title: "Pile Discarded", description: `The pile was moved to the forgotten pile.`});
             }
             
@@ -431,21 +423,17 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   useEffect(() => {
     if (gameState.gameStatus !== 'playing') return;
 
-    // This is the full row cascade, when the top row is discarded.
     const topRowEmpty = gameState.playDeck[0].every(card => card === null);
 
     if (topRowEmpty && gameState.mainDeck.length > 0) {
       setGameState(prevState => {
-        // Double check condition inside state update to prevent race conditions
         const isTopRowActuallyEmpty = prevState.playDeck[0].every(card => card === null);
         if (!isTopRowActuallyEmpty) return prevState;
 
         const newState = JSON.parse(JSON.stringify(prevState));
         
-        // Move bottom row to top row
         newState.playDeck[0] = newState.playDeck[1];
         
-        // Deal 4 new cards to the bottom row
         newState.playDeck[1] = [];
         for (let i = 0; i < 4; i++) {
           const newCard = newState.mainDeck.pop();
@@ -464,20 +452,16 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     const card = gameState.playDeck[rowIndex][colIndex];
     if (!card) return false;
 
-    // Bottom row cards are never directly playable
     if (rowIndex === 1) {
       return false;
     }
     
-    // Top row cards are playable if the card above it in the 0th row is null
     if (rowIndex === 0) {
-        if(gameState.playDeck[0][colIndex-1] === null) {
-            return true;
+      for (let i = 0; i < colIndex; i++) {
+        if (gameState.playDeck[0][i] !== null) {
+          return false;
         }
-    }
-    
-    // Card in the first column of the top row is always playable
-    if (rowIndex === 0 && colIndex === 0) {
+      }
       return true;
     }
     
@@ -509,8 +493,9 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                         key={sequence.id} 
                         id={`narrative-${index}`} 
                         onDrop={handleDrop}
-                        className={`relative ${isDiscardMode ? 'cursor-pointer border-destructive hover:border-destructive/80' : ''}`}
+                        className={`relative ${isDiscardMode && sequence.cards.length > 0 ? 'cursor-pointer border-destructive hover:border-destructive/80' : ''}`}
                         suit={sequence.cards.length > 0 ? (sequence.cards.find(c => c.rank !== 'Joker')?.suit || undefined) : undefined}
+                        hasVisibleContent={sequence.cards.length > 0}
                       >
                          {isDiscardMode && sequence.cards.length > 0 && (
                             <div
@@ -569,7 +554,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                             {card && <GameCard 
                               card={card} 
                               source={`play-1-${index}`} 
-                              isDraggable={isPlayable(1, index)}
+                              isDraggable={false}
                                onClick={
                                 isPlayable(1,index) ?
                                   card.rank === 'K' ? () => handleKingClick(card) :
@@ -709,5 +694,3 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     </>
   );
 }
-
-    

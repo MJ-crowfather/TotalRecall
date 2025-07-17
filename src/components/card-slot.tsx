@@ -1,3 +1,4 @@
+
 "use client";
 
 import { cn } from "@/lib/utils";
@@ -18,9 +19,10 @@ interface CardSlotProps {
   children?: React.ReactNode;
   className?: string;
   suit?: Suit;
+  hasVisibleContent?: boolean;
 }
 
-export function CardSlot({ id, onDrop, children, className, suit }: CardSlotProps) {
+export function CardSlot({ id, onDrop, children, className, suit, hasVisibleContent = false }: CardSlotProps) {
   const [isOver, setIsOver] = React.useState(false);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -46,6 +48,7 @@ export function CardSlot({ id, onDrop, children, className, suit }: CardSlotProp
   };
 
   const SuitIcon = suit ? suitIcons[suit] : null;
+  const showBorder = !hasVisibleContent && !children;
 
   return (
     <div
@@ -55,8 +58,9 @@ export function CardSlot({ id, onDrop, children, className, suit }: CardSlotProp
       onDrop={handleDrop}
       className={cn(
         "w-24 h-36 rounded-lg flex items-center justify-center transition-colors",
-        isOver ? "bg-accent/50 border-accent" : "",
-        children ? "border-solid border-transparent" : "border-2 border-dashed border-muted-foreground/50",
+        "border-2",
+        isOver ? "bg-accent/50 border-accent" : "border-solid border-transparent",
+        showBorder && "border-dashed border-muted-foreground/50",
         className
       )}
     >
