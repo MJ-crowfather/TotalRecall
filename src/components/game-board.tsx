@@ -12,7 +12,6 @@ import { useToast } from '@/hooks/use-toast';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import Link from 'next/link';
 import { Button } from './ui/button';
-import { setupGame } from '@/lib/game';
 
 type DraggableData = {
   card: Card;
@@ -21,7 +20,7 @@ type DraggableData = {
 
 const CARDS_PER_SET = 3;
 
-const RANK_ORDER: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'Joker'];
+const RANK_ORDER: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
 export function GameBoard({ initialGameState }: { initialGameState: GameState }) {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
@@ -31,7 +30,10 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   const [isDiscardMode, setIsDiscardMode] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState<number | null>(null);
 
-  const getRankValue = (rank: Rank): number => RANK_ORDER.indexOf(rank);
+  const getRankValue = (rank: Rank): number => {
+    if (rank === 'Joker') return -1; // Jokers are special
+    return RANK_ORDER.indexOf(rank);
+  }
 
   const getCompletedSets = useCallback((pile: MemoryPile) => {
     return Math.floor(pile.cards.length / CARDS_PER_SET) + pile.completedWithQueens;
@@ -47,16 +49,35 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   const processNarrativeSet = useCallback((newState: GameState, sequenceIndex: number) => {
       const sequence = newState.narrativeDeck[sequenceIndex];
       if (sequence.cards.length < CARDS_PER_SET) return false;
-
-      const sortedCards = [...sequence.cards].sort((a, b) => getRankValue(a.rank) - getRankValue(b.rank));
       
-      const isSequential = getRankValue(sortedCards[0].rank) + 1 === getRankValue(sortedCards[1].rank) && getRankValue(sortedCards[1].rank) + 1 === getRankValue(sortedCards[2].rank);
+      const nonJokers = sequence.cards.filter(c => c.rank !== 'Joker');
+      if (nonJokers.length === 0) return false; // Cannot determine suit or ranks
 
-      if (isSequential) {
-        const suit = sortedCards[0].suit;
+      const suit = nonJokers[0].suit as Suit;
+      
+      // Separate jokers and numbered cards
+      const jokers = sequence.cards.filter(c => c.rank === 'Joker');
+      const numberedCards = nonJokers.map(c => ({...c, rankValue: getRankValue(c.rank)}));
+      numberedCards.sort((a, b) => a.rankValue - b.rankValue);
+
+      const minRank = numberedCards[0].rankValue;
+      const maxRank = numberedCards[numberedCards.length-1].rankValue;
+      const rankDiff = maxRank - minRank;
+
+      let isSet = false;
+      if(numberedCards.length === 3) {
+          isSet = rankDiff === 2; // e.g. 5,6,7
+      } else if (numberedCards.length === 2) {
+          isSet = rankDiff <= 2; // Needs 1 joker. e.g. 5,7 -> joker is 6. 5,6 -> joker is 4 or 7
+      } else if (numberedCards.length === 1) {
+          isSet = true; // Needs 2 jokers. any card + 2 jokers is a set.
+      }
+
+
+      if (isSet) {
         const pile = newState.memoryPiles[suit];
 
-        pile.cards.push(...sortedCards);
+        pile.cards.push(...sequence.cards);
         
         const newCard = newState.mainDeck.pop();
         sequence.cards = newCard ? [newCard] : [];
@@ -90,6 +111,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
       const newState: GameState = JSON.parse(JSON.stringify(prevState));
       const { card, source } = data;
+      const isPlay = target.startsWith('narrative-');
 
       let cardFoundAndRemoved = false;
       
@@ -99,17 +121,12 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         const col = parseInt(colStr);
 
         if (newState.playDeck[row]?.[col]?.id === card.id) {
-            // Differentiate between PLAY and DISCARD
-            if (target === 'forgotten') { // This is a DISCARD
+            if (isPlay && row === 0) { // PLAY from top row
+                const cardBelow = newState.playDeck[1][col];
+                newState.playDeck[0][col] = cardBelow;
+                newState.playDeck[1][col] = newState.mainDeck.pop() ?? null;
+            } else { // DISCARD or PLAY from bottom row
                 newState.playDeck[row][col] = null;
-            } else { // This is a PLAY
-                if (row === 0) {
-                    const cardBelow = newState.playDeck[1][col];
-                    newState.playDeck[0][col] = cardBelow;
-                    newState.playDeck[1][col] = newState.mainDeck.pop() ?? null;
-                } else {
-                     newState.playDeck[row][col] = null;
-                }
             }
             cardFoundAndRemoved = true;
         }
@@ -129,17 +146,20 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         return prevState; 
       }
       
-      // Handle card placement at target
       if (target.startsWith('narrative-')) {
         const seqIndex = parseInt(target.split('-')[1]);
         const sequence = newState.narrativeDeck[seqIndex];
 
         if (card.rank === 'K') {
             setKingAction(card);
-            newState.forgottenPile.push(card); // King is spent
+            newState.forgottenPile.push(card); 
             return newState;
         }
         if (card.rank === 'Q') {
+          if (card.suit === 'joker') {
+            toast({ title: "Invalid Move", description: "A Queen must belong to a suit.", variant: "destructive" });
+            return prevState;
+          }
           const pile = newState.memoryPiles[card.suit];
           pile.completedWithQueens++;
           const goal = newState.goals.find(g => g.suit === card.suit)!;
@@ -153,47 +173,52 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           }
           return newState;
         }
+        
+        const nonJokerCards = sequence.cards.filter(c => c.rank !== 'Joker');
+        const sequenceSuit = nonJokerCards.length > 0 ? nonJokerCards[0].suit : (card.suit !== 'joker' ? card.suit : undefined);
 
-        if (sequence.cards.length > 0 && card.suit !== sequence.cards[0].suit) {
-          toast({ title: "Invalid Move", description: `This sequence is for ${sequence.cards[0].suit}.`, variant: "destructive" });
-          return prevState;
+        if (card.rank !== 'Joker' && sequenceSuit && card.suit !== sequenceSuit) {
+           toast({ title: "Invalid Move", description: `This sequence is for ${sequenceSuit}.`, variant: "destructive" });
+           return prevState;
         }
 
-        if (sequence.cards.some(c => c.rank === card.rank)) {
+        if (sequence.cards.some(c => c.rank === card.rank && card.rank !== 'Joker')) {
            toast({ title: "Invalid Move", description: "Cannot have duplicate ranks in a sequence.", variant: "destructive" });
            return prevState;
         }
-        
+
         const cardRankValue = getRankValue(card.rank);
-        const ranksInSequence = sequence.cards.map(c => getRankValue(c.rank));
+        const ranksInSequence = sequence.cards.filter(c => c.rank !== 'Joker').map(c => getRankValue(c.rank));
         const minRank = Math.min(...ranksInSequence);
         const maxRank = Math.max(...ranksInSequence);
 
-        if (sequence.cards.length === 1) {
-            if (Math.abs(cardRankValue - minRank) > 2 || Math.abs(cardRankValue-minRank) === 0) {
-                toast({ title: "Invalid Move", description: "Card rank is too far to form a set.", variant: "destructive" });
-                return prevState;
-            }
-        } else if (sequence.cards.length === 2) {
-            const isBetween = cardRankValue > minRank && cardRankValue < maxRank;
-            const isAdjacent = cardRankValue === minRank - 1 || cardRankValue === maxRank + 1;
-            
-            if (maxRank - minRank === 1) { // e.g. 5, 6
-                if(!isAdjacent) { // requires 4 or 7
-                    toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
-                    return prevState;
-                }
-            } else if (maxRank - minRank === 2) { // e.g. 5, 7
-                 if(!isBetween) { // requires 6
-                    toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
-                    return prevState;
-                 }
-            } else { // e.g. 5, 8 - invalid state
-                toast({ title: "Invalid Move", description: "This card does not fit the sequence.", variant: "destructive" });
-                return prevState;
-            }
+        if (card.rank !== 'Joker') {
+          if (sequence.cards.length === 1 && nonJokerCards.length === 1) {
+              if (Math.abs(cardRankValue - minRank) > 2) {
+                  toast({ title: "Invalid Move", description: "Card rank is too far to form a set.", variant: "destructive" });
+                  return prevState;
+              }
+          } else if (sequence.cards.length === 2 && nonJokerCards.length === 2) {
+              const isBetween = cardRankValue > minRank && cardRankValue < maxRank;
+              const isAdjacent = cardRankValue === minRank - 1 || cardRankValue === maxRank + 1;
+              
+              if (maxRank - minRank === 1) { // e.g. 5, 6
+                  if(!isAdjacent) { // requires 4 or 7
+                      toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
+                      return prevState;
+                  }
+              } else if (maxRank - minRank === 2) { // e.g. 5, 7
+                   if(!isBetween) { // requires 6
+                      toast({ title: "Invalid Move", description: "This card does not complete the sequence.", variant: "destructive" });
+                      return prevState;
+                   }
+              } else { // e.g. 5, 8 - invalid state
+                  toast({ title: "Invalid Move", description: "This card does not fit the sequence.", variant: "destructive" });
+                  return prevState;
+              }
+          }
         }
-
+        
         sequence.cards.push(card);
         const lossOccurred = processNarrativeSet(newState, seqIndex);
         if (lossOccurred) return newState;
@@ -234,7 +259,6 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         const newState = JSON.parse(JSON.stringify(prevState));
         let kingFound = false;
 
-        // Find and remove the king from the play deck, leaving the spot empty
         for (let i = 0; i < newState.playDeck.length; i++) {
             for (let j = 0; j < newState.playDeck[i].length; j++) {
                 if (newState.playDeck[i][j]?.id === card.id) {
@@ -283,7 +307,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
             if (sequenceToDiscard && sequenceToDiscard.cards.length > 0) {
                 newState.forgottenPile.push(...sequenceToDiscard.cards);
-                newState.narrativeDeck[confirmDiscard].cards = []; // Leave the slot empty
+                newState.narrativeDeck[confirmDiscard].cards = []; 
                 toast({ title: "Card Discarded", description: `The pile was moved to the forgotten pile.`});
             }
             
@@ -307,17 +331,13 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     const card = gameState.playDeck[rowIndex][colIndex];
     if (!card) return false;
 
-    // A card in row 0 is only playable if its index corresponds to the first non-null card from left to right.
     if (rowIndex === 0) {
-        for (let i = 0; i < colIndex; i++) {
-            if (gameState.playDeck[0][i] !== null) {
-                return false;
-            }
-        }
-        return true;
+      // Find the first non-null card from the left in the top row
+      const firstPlayableIndex = gameState.playDeck[0].findIndex(c => c !== null);
+      // The card is playable if its index matches the first available card's index
+      return colIndex === firstPlayableIndex;
     }
 
-    // A card in the bottom row is playable only if the card above it is gone.
     const cardAbove = gameState.playDeck[0][colIndex];
     return cardAbove === null;
   };
@@ -340,7 +360,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           <div className="lg:col-span-2 flex flex-col gap-6">
               <div className="bg-primary/10 p-4 rounded-lg space-y-8 flex-grow flex flex-col">
                 <div>
-                  <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Memory Sequences</h2>
+                  <h2 className="font-headline text-xl text-primary/80 mb-2 text-center">Narrative Deck</h2>
                   <div className="flex justify-around flex-wrap gap-2">
                     {gameState.narrativeDeck.map((sequence, index) => (
                       <CardSlot 
@@ -348,9 +368,9 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                         id={`narrative-${index}`} 
                         onDrop={handleDrop}
                         className={`relative ${isDiscardMode ? 'border-destructive' : ''}`}
-                        suit={sequence.cards.length > 0 ? sequence.cards[0].suit : undefined}
+                        suit={sequence.cards.length > 0 && sequence.cards[0].suit !== 'joker' ? sequence.cards[0].suit : undefined}
                       >
-                        {sequence.cards.length > 0 ? (
+                        {sequence.cards.length > 0 && (
                            sequence.cards.map((c, i) => (
                               <div 
                                 key={c.id} 
@@ -366,7 +386,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                                 />
                               </div>
                             ))
-                        ) : null}
+                        )}
                       </CardSlot>
                     ))}
                   </div>
@@ -481,5 +501,3 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     </>
   );
 }
-
-    

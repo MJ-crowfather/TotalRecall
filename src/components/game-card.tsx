@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Card as CardType, Suit } from "@/lib/types";
+import { Card as CardType, Suit, CardSuit } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ClubIcon, DiamondIcon, HeartIcon, SpadeIcon } from "./icons";
 import React from "react";
@@ -13,11 +13,12 @@ const suitIcons: Record<Suit, React.ElementType> = {
   diamonds: DiamondIcon,
 };
 
-const suitColors: Record<Suit, string> = {
+const suitColors: Record<CardSuit, string> = {
   spades: "text-foreground",
   hearts: "text-red-600",
   clubs: "text-foreground",
   diamonds: "text-red-600",
+  joker: "text-red-600",
 };
 
 interface GameCardProps {
@@ -29,7 +30,7 @@ interface GameCardProps {
 }
 
 export function GameCard({ card, source, isDraggable = true, className, onClick }: GameCardProps) {
-  const SuitIcon = suitIcons[card.suit];
+  const SuitIcon = card.suit !== 'joker' ? suitIcons[card.suit] : HeartIcon; // Default icon for Joker
   const isClickable = !!onClick;
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
@@ -41,6 +42,35 @@ export function GameCard({ card, source, isDraggable = true, className, onClick 
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("application/json", JSON.stringify(data));
   };
+
+  if (card.rank === 'Joker') {
+    return (
+        <div
+            draggable={isDraggable}
+            onDragStart={handleDragStart}
+            onClick={onClick}
+            className={cn(
+                "w-24 h-36 bg-card rounded-lg p-2 flex flex-col justify-between shadow-md border",
+                isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "",
+                !isDraggable && !isClickable ? "cursor-not-allowed" : "",
+                isClickable ? "cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all" : "",
+                suitColors['joker'],
+                className
+            )}
+            title="Joker"
+        >
+            <div className="text-left">
+                <p className="font-bold text-xl font-body">Joker</p>
+            </div>
+            <div className="text-center">
+                <SuitIcon className="w-8 h-8 mx-auto" />
+            </div>
+            <div className="text-right transform rotate-180">
+                <p className="font-bold text-xl font-body">Joker</p>
+            </div>
+        </div>
+    );
+  }
   
   return (
     <div
@@ -52,7 +82,7 @@ export function GameCard({ card, source, isDraggable = true, className, onClick 
         isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "",
         !isDraggable && !isClickable ? "cursor-not-allowed" : "",
         isClickable ? "cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all" : "",
-        suitColors[card.suit],
+        card.suit !== 'joker' && suitColors[card.suit],
         className
       )}
       title={`${card.rank} of ${card.suit}`}

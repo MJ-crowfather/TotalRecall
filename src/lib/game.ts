@@ -1,11 +1,11 @@
-import { type Suit, type Rank, type Card, type Goal, type GameState, type NarrativeSequence } from './types';
+import { type Suit, type Rank, type Card, type Goal, type GameState, type NarrativeSequence, CardSuit } from './types';
 
 const SUITS: Suit[] = ['spades', 'hearts', 'clubs', 'diamonds'];
 const RANKS: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const ROYAL_RANKS: Rank[] = ['J', 'Q', 'K'];
 
 export const createDeck = (): Card[] => {
-  const standardDeck = SUITS.flatMap(suit =>
+  const standardDeck: Card[] = SUITS.flatMap(suit =>
     RANKS.map(rank => ({
       id: `${rank}-${suit}`,
       suit,
@@ -13,8 +13,8 @@ export const createDeck = (): Card[] => {
     }))
   );
   // Add two Jokers
-  standardDeck.push({ id: 'Joker-1', suit: 'spades', rank: 'Joker' });
-  standardDeck.push({ id: 'Joker-2', suit: 'hearts', rank: 'Joker' });
+  standardDeck.push({ id: 'Joker-1', suit: 'joker', rank: 'Joker' });
+  standardDeck.push({ id: 'Joker-2', suit: 'joker', rank: 'Joker' });
   return standardDeck;
 };
 
@@ -40,7 +40,6 @@ export const setupGame = (): GameState => {
     const goals = generateGoals();
     let deck = shuffleDeck(createDeck());
     
-    // Deal Narrative Deck (4 cards), ensuring no royal cards or jokers
     const narrativeDeck: NarrativeSequence[] = [];
     const tempHeldCards: Card[] = [];
 
@@ -55,11 +54,9 @@ export const setupGame = (): GameState => {
         }
     }
     
-    // Add held cards back to the deck and reshuffle
     deck.push(...tempHeldCards);
     deck = shuffleDeck(deck);
 
-    // Deal Play Deck (8 cards in 2 rows)
     const playDeck: (Card | null)[][] = [[], []];
     for (let i = 0; i < 2; i++) {
         for (let j = 0; j < 4; j++) {
@@ -84,5 +81,3 @@ export const setupGame = (): GameState => {
         history: [],
     };
 };
-
-    
