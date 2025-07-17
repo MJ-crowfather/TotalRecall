@@ -50,7 +50,7 @@ export function GameCard({ card, source, isDraggable = true, className, onClick 
             onDragStart={handleDragStart}
             onClick={onClick}
             className={cn(
-                "w-24 h-36 bg-card rounded-lg p-2 flex flex-col justify-between shadow-md border",
+                "w-24 h-36 bg-card rounded-lg p-2 flex flex-col justify-between items-center shadow-md border",
                 isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "",
                 !isDraggable && !isClickable ? "cursor-not-allowed" : "",
                 isClickable ? "cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all" : "",
@@ -59,13 +59,11 @@ export function GameCard({ card, source, isDraggable = true, className, onClick 
             )}
             title="Joker"
         >
-            <div className="text-left">
+            <div className="text-left w-full">
                 <p className="font-bold text-xl font-body">Joker</p>
             </div>
-            <div className="text-center">
-                <SuitIcon className="w-8 h-8 mx-auto" />
-            </div>
-            <div className="text-right transform rotate-180">
+            <div className="font-bold text-3xl font-headline">JOKER</div>
+            <div className="text-right w-full transform rotate-180">
                 <p className="font-bold text-xl font-body">Joker</p>
             </div>
         </div>
