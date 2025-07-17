@@ -1,3 +1,6 @@
+
+"use client";
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Button } from './ui/button';
 import { GameCard } from './game-card';
@@ -18,7 +21,7 @@ export function CardBack({ count, pileName, pile, className }: { count: number, 
     return (
       <Dialog>
         <DialogTrigger asChild>
-          <Button variant="ghost" className="p-0 h-auto w-auto hover:bg-transparent">
+          <Button variant="ghost" className="p-0 h-auto w-auto hover:bg-transparent cursor-pointer">
             {content}
           </Button>
         </DialogTrigger>
@@ -29,7 +32,12 @@ export function CardBack({ count, pileName, pile, className }: { count: number, 
           <ScrollArea className="h-96">
             <div className="flex flex-wrap gap-4 justify-center p-4">
               {pile.map(card => (
-                <GameCard key={card.id} card={card} source={`${pileName}-pile`} />
+                <GameCard 
+                  key={card.id} 
+                  card={card} 
+                  source={`${pileName}-pile`} 
+                  isDraggable={false} 
+                />
               ))}
             </div>
           </ScrollArea>
