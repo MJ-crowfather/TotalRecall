@@ -288,12 +288,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
 
   const handleNarrativeCardClick = (index: number) => {
     if (!isDiscardMode) return;
-
-    if (gameState.narrativeDeck[index].cards.length > 1) {
-        toast({ title: "Cannot Discard", description: "Cannot discard a pile that is already part of a sequence.", variant: "destructive" });
-        return;
-    }
-
+    if (gameState.narrativeDeck[index].cards.length === 0) return;
     setConfirmDiscard(index);
   };
   
@@ -335,7 +330,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
        }
     }
 
-  }, [gameState.gameStatus, gameState.mainDeck.length, gameState.playDeck, checkWinCondition, toast]);
+  }, [gameState, checkWinCondition, toast]);
   
   const isPlayable = (rowIndex: number, colIndex: number): boolean => {
     if (gameState.gameStatus !== 'playing') return false;
