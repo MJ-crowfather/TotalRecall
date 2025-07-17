@@ -77,9 +77,8 @@ export function GameCard({ card, source, isDraggable = true, className, onClick 
       onClick={onClick}
       className={cn(
         "w-24 h-36 bg-card rounded-lg p-2 flex flex-col justify-between shadow-md border",
-        isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "",
-        !isDraggable && !isClickable ? "cursor-not-allowed" : "",
-        isClickable ? "cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all" : "",
+        isDraggable ? "cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1 transition-all" : "cursor-not-allowed",
+        isClickable ? "cursor-pointer" : "",
         card.suit !== 'joker' && suitColors[card.suit],
         className
       )}
@@ -99,3 +98,5 @@ export function GameCard({ card, source, isDraggable = true, className, onClick 
     </div>
   );
 }
+
+    
