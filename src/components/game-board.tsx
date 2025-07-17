@@ -255,12 +255,14 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     setGameState(prevState => {
       const newState = JSON.parse(JSON.stringify(prevState));
       let queenFound = false;
+      let queenRow = -1;
+      let queenCol = -1;
 
-      // Remove Queen from play deck, leaving the spot empty
       for (let i = 0; i < newState.playDeck.length; i++) {
           for (let j = 0; j < newState.playDeck[i].length; j++) {
               if (newState.playDeck[i][j]?.id === card.id) {
-                  newState.playDeck[i][j] = null;
+                  queenRow = i;
+                  queenCol = j;
                   queenFound = true;
                   break;
               }
@@ -272,7 +274,8 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           console.error("Queen card not found in play deck to remove.");
           return prevState;
       }
-
+      
+      // Add queen to forgotten pile before it's removed from play deck
       newState.forgottenPile.push(card);
 
       if (action === 'completeSet') {
@@ -280,6 +283,13 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
              toast({ title: "Invalid Action", description: "A Joker Queen cannot be used this way.", variant: "destructive" });
              return prevState; 
           }
+          
+          // This is a "Play", so cascade the column
+          if (queenRow !== -1 && queenCol !== -1) {
+              newState.playDeck[queenRow][queenCol] = newState.playDeck[1][queenCol];
+              newState.playDeck[1][queenCol] = newState.mainDeck.pop() ?? null;
+          }
+
           const pile = newState.memoryPiles[card.suit];
           pile.completedWithQueens++;
 
@@ -292,6 +302,11 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
           } else {
              toast({ title: "Set Completed!", description: `You used the Queen to complete a set of ${card.suit}.` });
           }
+      } else { // discardQueen
+        // This is a "Discard", so just empty the slot
+        if (queenRow !== -1 && queenCol !== -1) {
+            newState.playDeck[queenRow][queenCol] = null;
+        }
       }
       
       return newState;
