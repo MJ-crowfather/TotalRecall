@@ -121,23 +121,7 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         const col = parseInt(colStr);
 
         if (newState.playDeck[row]?.[col]?.id === card.id) {
-            // If card is played (to narrative), cascade. If discarded (to forgotten), don't.
-            if (target.startsWith('narrative-')) {
-                // Card is played
-                if (row === 0) {
-                    const cardBelow = newState.playDeck[1][col];
-                    newState.playDeck[0][col] = cardBelow;
-                    newState.playDeck[1][col] = newState.mainDeck.pop() ?? null;
-                } else {
-                     newState.playDeck[row][col] = null;
-                }
-            } else if (target === 'forgotten') {
-                 // Card is discarded
-                 newState.playDeck[row][col] = null;
-            } else {
-                 // Invalid drop target for a play deck card, just discard it
-                 newState.playDeck[row][col] = null;
-            }
+            newState.playDeck[row][col] = null;
             cardFoundAndRemoved = true;
         }
       }
@@ -366,12 +350,14 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
   useEffect(() => {
     if (gameState.gameStatus !== 'playing') return;
 
+    // A cascade happens when the top row is empty AND the main deck has cards.
     const topRowEmpty = gameState.playDeck[0].every(card => card === null);
 
-    if (topRowEmpty) {
+    if (topRowEmpty && gameState.mainDeck.length > 0) {
       setGameState(prevState => {
-        // Only proceed if the top row is actually empty and we are not in the middle of another update
-        if (!prevState.playDeck[0].every(card => card === null)) return prevState;
+        // Double check condition inside state update to prevent race conditions
+        const isTopRowActuallyEmpty = prevState.playDeck[0].every(card => card === null);
+        if (!isTopRowActuallyEmpty || prevState.mainDeck.length === 0) return prevState;
 
         const newState = JSON.parse(JSON.stringify(prevState));
         
@@ -389,21 +375,20 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
         return newState;
       });
     }
-  }, [gameState.playDeck, gameState.gameStatus, toast]);
+  }, [gameState.playDeck, gameState.mainDeck, gameState.gameStatus, toast]);
 
   const isPlayable = (rowIndex: number, colIndex: number): boolean => {
     if (gameState.gameStatus !== 'playing') return false;
     const card = gameState.playDeck[rowIndex][colIndex];
     if (!card) return false;
 
-    // A card in the top row is playable
-    if (rowIndex === 0) {
-      return true;
+    // A card in the bottom row is playable only if the card directly above it is null
+    if (rowIndex === 1) {
+      return gameState.playDeck[0][colIndex] === null;
     }
     
-    // Bottom row card is playable only if the card directly above it is null
-    const cardAbove = gameState.playDeck[0][colIndex];
-    return cardAbove === null;
+    // A card in the top row is playable
+    return true;
   };
   
   return (
@@ -431,22 +416,27 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
                         key={sequence.id} 
                         id={`narrative-${index}`} 
                         onDrop={handleDrop}
-                        className={`relative ${isDiscardMode ? 'border-destructive' : ''}`}
-                        suit={sequence.cards.length > 0 && sequence.cards.find(c => c.rank !== 'Joker')?.suit || undefined}
+                        className={`relative ${isDiscardMode ? 'cursor-pointer border-destructive hover:border-destructive/80' : ''}`}
+                        suit={sequence.cards.length > 0 ? (sequence.cards.find(c => c.rank !== 'Joker')?.suit || undefined) : undefined}
                       >
+                         {isDiscardMode && sequence.cards.length > 0 && (
+                            <div
+                              className="absolute inset-0 z-20"
+                              onClick={() => handleNarrativeCardClick(index)}
+                            />
+                         )}
                         {sequence.cards.length > 0 && (
                            sequence.cards.map((c, i) => (
                               <div 
                                 key={c.id} 
                                 className="absolute" 
                                 style={{ top: `${i * 25}px`, zIndex: i }}
-                                onClick={isDiscardMode ? () => handleNarrativeCardClick(index) : undefined}
                               >
                                 <GameCard 
                                   card={c} 
                                   source={`narrative-card-${i}`} 
                                   isDraggable={false}
-                                  className={isDiscardMode ? 'cursor-pointer hover:border-destructive hover:shadow-lg' : ''}
+                                  className={isDiscardMode ? 'border-destructive' : ''}
                                 />
                               </div>
                             ))
@@ -589,5 +579,3 @@ export function GameBoard({ initialGameState }: { initialGameState: GameState })
     </>
   );
 }
-
-    
